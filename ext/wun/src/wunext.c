@@ -79,7 +79,7 @@ static void wunext_throw(WUNEXT *wunext, char *func) {
 }
 
 static int sys_open(char *fn, int flags, WUNEXT *wunext) {
-	int fildes=open(fn,flags,DEFFILEMODE);
+	int fildes=open(fn,flags,0666);
 	if (fildes==-1) {
 		wunext_throw(wunext,"open");
 		return 0;
