@@ -20,3 +20,7 @@ ssh -lroot -p2222 -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no loca
 ---
 
 BOOT_IMAGE=vmlinuz-lts root=UUID=c91cd526-8ebc-40f7-862e-291be56c3055 modules=sd-mod,usb-storage,ext4 quiet rootfstype=ext4 initrd=initramfs-lts
+
+---
+
+needed: mesa-dri-gallium lsblk
