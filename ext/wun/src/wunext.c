@@ -224,12 +224,35 @@ static int sys_waitpid(int pid, WUNEXT *wunext) {
 	return status;
 }
 
-static void sys_exit(int code, WUNEXT *wunext) {
-	exit(code);
-}
-
 static void console_log(char *s) {
 	printf("%s\n",s);
+}
+
+static void sys_exit(int code, WUNEXT *wunext) {
+	GVariant *variant=g_variant_new("(i)",code);
+	WebKitUserMessage *message=webkit_user_message_new("exit",variant);
+	webkit_web_extension_send_message_to_context(wunext->extension,message,NULL,NULL,NULL);
+}
+
+static void window_resizeTo(int w, int h, WUNEXT *wunext) {
+	GVariant *variant=g_variant_new("(ii)",w,h);
+	WebKitUserMessage *message=webkit_user_message_new("resize",variant);
+	webkit_web_extension_send_message_to_context(wunext->extension,message,NULL,NULL,NULL);
+}
+
+static void sys_show(WUNEXT *wunext) {
+	WebKitUserMessage *message=webkit_user_message_new("show",NULL);
+	webkit_web_extension_send_message_to_context(wunext->extension,message,NULL,NULL,NULL);
+}
+
+static char *window_get_title(WUNEXT *wunext) {
+	return g_strdup("no title for you");
+}
+
+static void window_set_title(char *title, WUNEXT *wunext) {
+	GVariant *variant=g_variant_new("(s)",title);
+	WebKitUserMessage *message=webkit_user_message_new("title",variant);
+	webkit_web_extension_send_message_to_context(wunext->extension,message,NULL,NULL,NULL);
 }
 
 static void 
@@ -303,7 +326,11 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 	);
 
 	jsc_value_object_set_property(sys,"exit",
-		jsc_value_new_function(context,"exit",G_CALLBACK(sys_exit),wunext,NULL,G_TYPE_NONE,0)
+		jsc_value_new_function(context,"exit",G_CALLBACK(sys_exit),wunext,NULL,G_TYPE_NONE,1,G_TYPE_INT)
+	);
+
+	jsc_value_object_set_property(sys,"show",
+		jsc_value_new_function(context,"show",G_CALLBACK(sys_show),wunext,NULL,G_TYPE_NONE,0)
 	);
 
 	JSCValue *console=jsc_value_new_object(context,NULL,NULL);
@@ -312,6 +339,22 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 	jsc_value_object_set_property(console,"log",
 		jsc_value_new_function(context,"log",G_CALLBACK(console_log),wunext,NULL,G_TYPE_NONE,1,G_TYPE_STRING)
 	);
+
+	JSCValue *window=jsc_context_get_value(context,"window");
+
+	jsc_value_object_set_property(window,"resizeTo",
+		jsc_value_new_function(context,"resizeTo",G_CALLBACK(window_resizeTo),wunext,NULL,G_TYPE_NONE,2,G_TYPE_INT,G_TYPE_INT)
+	);
+
+	jsc_value_object_define_property_accessor(window,"title",
+		JSC_VALUE_PROPERTY_ENUMERABLE|JSC_VALUE_PROPERTY_WRITABLE,
+		G_TYPE_STRING,G_CALLBACK(window_get_title),G_CALLBACK(window_set_title),wunext,NULL);
+
+	JSCValue *document=jsc_context_get_value(context,"document");
+
+	jsc_value_object_define_property_accessor(document,"title",
+		JSC_VALUE_PROPERTY_ENUMERABLE|JSC_VALUE_PROPERTY_WRITABLE,
+		G_TYPE_STRING,G_CALLBACK(window_get_title),G_CALLBACK(window_set_title),wunext,NULL);
 }
 
 G_MODULE_EXPORT void
