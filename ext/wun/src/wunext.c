@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include <gio/gunixfdlist.h>
 #include "wunext.h"
 
@@ -78,7 +79,7 @@ static void wunext_throw(WUNEXT *wunext, char *func) {
 }
 
 static int sys_open(char *fn, int flags, WUNEXT *wunext) {
-	int fildes=open(fn,flags);
+	int fildes=open(fn,flags,DEFFILEMODE);
 	if (fildes==-1) {
 		wunext_throw(wunext,"open");
 		return 0;
@@ -155,16 +156,24 @@ static JSCValue *sys_readCharCodeArray(int fd, int size, WUNEXT *wunext) {
 	return v;
 }
 
-static int sys_write(int fd, JSCValue *data, WUNEXT *wunext) {
-	GBytes *bytes=jsc_value_to_string_as_bytes(data);
-	int written=write(fd,g_bytes_get_data(bytes,NULL),g_bytes_get_size(bytes));
+static int sys_writeCharCodeArray(int fd, JSCValue *data, WUNEXT *wunext) {
+	int len=jsc_value_to_int32(jsc_value_object_get_property(data,"length"));
+	unsigned char *buf=g_malloc(len);
 
-	if (written==-1) {
+	JSCValue *v=jsc_value_object_get_property_at_index(data,0);
+
+	for (int i=0; i<len; i++)
+		buf[i]=jsc_value_to_int32(jsc_value_object_get_property_at_index(data,i));
+
+	int res=write(fd,buf,len);
+	g_free(buf);
+
+	if (res<0) {
 		wunext_throw(wunext,"write");
-		return -1;
+		return res;
 	}
 
-	return written;
+	return res;
 }
 
 static int sys_fork(WUNEXT *wunext) {
@@ -273,6 +282,8 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 	jsc_value_object_set_property(sys,"O_RDONLY",jsc_value_new_number(context,O_RDONLY));
 	jsc_value_object_set_property(sys,"O_WRONLY",jsc_value_new_number(context,O_WRONLY));
 	jsc_value_object_set_property(sys,"O_RDWR",jsc_value_new_number(context,O_RDWR));
+	jsc_value_object_set_property(sys,"O_CREAT",jsc_value_new_number(context,O_CREAT));
+	jsc_value_object_set_property(sys,"O_TRUNC",jsc_value_new_number(context,O_TRUNC));
 
 	jsc_value_object_set_property(sys,"G_IO_IN",jsc_value_new_number(context,G_IO_IN));
 	jsc_value_object_set_property(sys,"G_IO_OUT",jsc_value_new_number(context,G_IO_OUT));
@@ -301,8 +312,8 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 		jsc_value_new_function(context,"readCharCodeArray",G_CALLBACK(sys_readCharCodeArray),wunext,NULL,JSC_TYPE_VALUE,2,G_TYPE_INT,G_TYPE_INT)
 	);
 
-	jsc_value_object_set_property(sys,"write",
-		jsc_value_new_function(context,"write",G_CALLBACK(sys_write),wunext,NULL,G_TYPE_INT,2,G_TYPE_INT,G_TYPE_VALUE)
+	jsc_value_object_set_property(sys,"writeCharCodeArray",
+		jsc_value_new_function(context,"writeCharCodeArray",G_CALLBACK(sys_writeCharCodeArray),wunext,NULL,G_TYPE_INT,2,G_TYPE_INT,JSC_TYPE_VALUE)
 	);
 
 	jsc_value_object_set_property(sys,"fork",

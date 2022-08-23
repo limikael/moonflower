@@ -16,6 +16,18 @@ export function readFileSync(fn) {
 	return res;
 }
 
+export function writeFileSync(fn, content) {
+	let encoder=new TextEncoder();
+	let data=Array.from(encoder.encode(content));
+
+	let fd=sys.open(fn,sys.O_WRONLY|sys.O_CREAT|sys.O_TRUNC);
+	while (data.length)
+		data.splice(0,sys.writeCharCodeArray(fd,data));
+
+	sys.close(fd);
+}
+
 export default {
-	readFileSync
+	readFileSync,
+	writeFileSync
 }
