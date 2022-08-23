@@ -1,0 +1,4 @@
+file with keyboard layouts:
+	evdev.xml
+
+lsblk -OJ
