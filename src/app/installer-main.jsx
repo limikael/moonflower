@@ -1,4 +1,7 @@
-#!/usr/bin/wun -h450 -w750 -t "Install Moonflower"
+#!/usr/bin/wun
+
+window.resizeTo(750,450);
+window.title="Install Moonflower";
 
 import InstallerApp from "./InstallerApp.jsx";
 
