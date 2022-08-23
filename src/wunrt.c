@@ -30,6 +30,21 @@ static gboolean wunrt_on_load_failed (WebKitWebView  *web_view,
 	printf("load error\n");
 }
 
+/*static gboolean wunrt_on_load_changed(
+		WebKitWebView *web_view,
+		WebKitLoadEvent load_event,
+		gpointer data) {
+	WUNRT *wunrt=data;
+	//printf("load change: %d\n",load_event);
+
+	switch (load_event) {
+		case WEBKIT_LOAD_FINISHED:
+			gtk_widget_show_all(wunrt->main_window);
+
+			break;
+	}
+}*/
+
 static void wunrt_on_wun_request(WebKitURISchemeRequest *request, gpointer data) {
 	WUNRT *wunrt=data;
 	
@@ -70,9 +85,40 @@ static void wunrt_on_filejs_request(WebKitURISchemeRequest *request, gpointer da
 	g_object_unref(stream);
 }
 
+static gboolean wunrt_on_message(WebKitWebContext *context, WebKitUserMessage *message, gpointer data) {
+	WUNRT *wunrt=data;
+	const char *name=webkit_user_message_get_name(message);
+	GVariant *variant=webkit_user_message_get_parameters(message);
+
+	//printf("msg: %s\n",name);
+
+	if (!strcmp(name,"resize")) {
+		int w,h;
+		g_variant_get(variant,"(ii)",&w,&h);
+		gtk_window_resize((GtkWindow *)wunrt->main_window,w,h);
+	}
+
+	if (!strcmp(name,"exit")) {
+		int code;
+		g_variant_get(variant,"(i)",&code);
+		exit(code);
+	}
+
+	if (!strcmp(name,"show")) {
+		gtk_widget_show_all(wunrt->main_window);
+	}
+
+	if (!strcmp(name,"title")) {
+		char *s;
+		g_variant_get(variant,"(s)",&s);
+		gtk_window_set_title((GtkWindow *)wunrt->main_window,s);
+	}
+}
+
 // use resource-load-started?
 void wunrt_create_window(WUNRT *wunrt) {
 	wunrt->main_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	//gtk_widget_set_app_paintable(wunrt->main_window, TRUE);
 	gtk_window_set_default_size(GTK_WINDOW(wunrt->main_window),wunrt->width,wunrt->height);
 
 	if (wunrt->title)
@@ -83,6 +129,7 @@ void wunrt_create_window(WUNRT *wunrt) {
 
 	g_signal_connect(wunrt->main_window, "destroy", G_CALLBACK(wunrt_on_window_close),wunrt);
 	g_signal_connect(wunrt->web_view,"load-failed",G_CALLBACK(wunrt_on_load_failed),wunrt);
+	//g_signal_connect(wunrt->web_view,"load-changed",G_CALLBACK(wunrt_on_load_changed),wunrt);
 
 	WebKitSettings *settings=webkit_web_view_get_settings(wunrt->web_view);
 	webkit_settings_set_enable_write_console_messages_to_stdout(settings,TRUE);
@@ -93,6 +140,8 @@ void wunrt_create_window(WUNRT *wunrt) {
 	webkit_web_context_register_uri_scheme(context,"wun",wunrt_on_wun_request,wunrt,NULL);
 	webkit_web_context_register_uri_scheme(context,"filejs",wunrt_on_filejs_request,wunrt,NULL);
 	webkit_web_context_set_web_extensions_directory(context,wunrt->library_path);
+
+	g_signal_connect(context,"user-message-received",G_CALLBACK(wunrt_on_message),wunrt);
 }
 
 void wunrt_set_library_path(WUNRT *wunrt, char *path) {
@@ -118,7 +167,7 @@ void wunrt_set_title(WUNRT *wunrt, char *title) {
 void wunrt_load_url(WUNRT *wunrt) {
 	char *content=
 		"<html>"
-		"<body></body>"
+		"<body onload=\"sys.show()\"></body>"
 		"<script src=\"%s\" type=\"module\"></script>"
 		"</html>";
 
@@ -149,5 +198,5 @@ void wunrt_run(WUNRT *wunrt) {
 	wunrt_load_url(wunrt);
 
 	gtk_widget_grab_focus(GTK_WIDGET(wunrt->web_view));
-	gtk_widget_show_all(wunrt->main_window);
+	//gtk_widget_show_all(wunrt->main_window);
 }
