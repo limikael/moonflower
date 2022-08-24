@@ -1,6 +1,7 @@
 import EventEmitter from "events";
 import {timezones} from "../data/timezones.js";
 import {call,spawn} from "wun:subprocess";
+import fs from "wun:fs";
 import DiskModel from "./DiskModel.js";
 import SubprocessModel from "./SubprocessModel.js";
 
@@ -74,6 +75,15 @@ export default class AppModel extends EventEmitter {
 		}
 	}
 
+	getTimezoneString=()=>{
+		let s=this.timezoneRegion;
+
+		if (this.timezoneLocation)
+			s+="/"+this.timezoneLocation;
+
+		return s;
+	}
+
 	setTimezoneLocation=(location)=>{
 		this.timezoneLocation=location;
 		this.emit("change");
@@ -113,9 +123,11 @@ export default class AppModel extends EventEmitter {
 		switch (this.installMethod) {
 			case "disk":
 				options=this.diskModel.getUnmountedDisks();
+				break;
 
 			case "part":
 				options=this.diskModel.getDisksWithUnmountedParts();
+				break;
 		}
 
 		return options;
@@ -146,7 +158,42 @@ export default class AppModel extends EventEmitter {
 		this.diskModel.setAutoUpdate(value);
 	}
 
+
 	startInstallation=()=>{
+		if (this.subprocessModel.isStarted())
+			return;
+
+		this.generateAnswerFile();
 		this.subprocessModel.startInstallation();
+	}
+
+	getDiskParams=()=>{
+		switch (this.installMethod) {
+			case "disk":
+				return this.installDisk;
+				break;
+		}
+
+		throw new Error("only disk supported");
+	}
+
+	generateAnswerFile=()=>{
+		let answerFileContents=
+`
+KEYMAPOPTS="${this.keyboardLayout+" "+this.keyboardVariant}"
+HOSTNAMEOPTS=moonflower
+DEVDOPTS=udev
+INTERFACESOPTS=none
+TIMEZONEOPTS="${this.getTimezoneString()}"
+PROXYOPTS=none
+APKREPOSOPTS="/root/moonflower/apks"
+USEROPTS="-a -u -g audio,video,netdev juser"
+SSHDOPTS=openssh
+NTPOPTS=none
+DISKOPTS="-m sys ${this.getDiskParams()}"
+LBUOPTS=none
+APKCACHEOPTS=none
+`;
+		fs.writeFileSync("/tmp/moonflower-install.txt",answerFileContents);
 	}
 }
