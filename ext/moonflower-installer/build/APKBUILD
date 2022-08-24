@@ -1,0 +1,22 @@
+pkgname="moonflower-installer"
+pkgver="0.1.0"
+pkgrel="0"
+pkgdesc="Moonflower Installer"
+url="https://example.com"
+arch="x86_64"
+license="COPYING"
+depends="wun"
+maintainer="Mikael Lindqvist <li.mikael@gmail.com>"
+
+#check() {
+#    :
+#}
+
+package() {
+	echo "******** pkgdir is $pkgdir"
+
+    mkdir -p $pkgdir
+    mkdir -p $pkgdir/usr/bin
+    # yarn build
+    cp ../bin/moonflower-installer $pkgdir/usr/bin
+}

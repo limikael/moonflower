@@ -1,7 +1,7 @@
 import DiskModel from "../../src/model/DiskModel.js";
 
 describe("DiskModel",()=>{
-	it("works",()=>{
+	/*it("works",()=>{
 		let diskModel=new DiskModel();
 		diskModel.data=
 			{
@@ -114,5 +114,14 @@ describe("DiskModel",()=>{
 		console.log(diskModel.getDisksWithUnmountedParts());
 
 		console.log(diskModel.getUnmountedParts("/dev/sdc"));
+	});*/
+
+	it("works",()=>{
+		let diskModel=new DiskModel();
+
+		diskModel.data={"blockdevices":[{"path":"/dev/loop0","name":"loop0","type":"loop","vendor":null,"model":null,"size":"106.2M","label":null,"mountpoints":["/.modloop"]},{"path":"/dev/sda","name":"sda","type":"disk","vendor":"ATA     ","model":"VBOX HARDDISK   ","size":"78.1G","label":null,"mountpoints":[null]},{"path":"/dev/sr0","name":"sr0","type":"rom","vendor":"VBOX    ","model":"CD-ROM          ","size":"278M","label":"alpine-std latest x86_64","mountpoints":["/media/cdrom"]}]};
+
+		console.log(diskModel.getUnmountedDisks());
+
 	});
 })

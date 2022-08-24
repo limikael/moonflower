@@ -6,6 +6,10 @@ export default class DiskModel extends EventEmitter {
 		super();
 	}
 
+	isStarted=()=>{
+		return !!this.subprocess;
+	}
+
 	startInstallation=()=>{
 		if (this.subprocess)
 			return;
