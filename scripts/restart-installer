@@ -1,0 +1,7 @@
+#!/usr/bin/bash
+
+VBoxManage controlvm installerdebug poweroff
+sleep 1
+VBoxManage modifyvm installerdebug --boot1 disk --boot2 dvd --boot3 none --boot4 none
+sleep 1
+VBoxManage startvm installerdebug

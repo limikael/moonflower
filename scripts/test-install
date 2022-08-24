@@ -1,0 +1,51 @@
+#!/bin/sh
+
+echo "/root/moonflower/apks" > /etc/apk/repositories
+apk update
+
+apk add sfdisk
+
+printf "1M,1G,,*\n,100M," | sfdisk /dev/sda
+mkfs.ext4 /dev/sda1
+mount -t ext4 /dev/sda1 /mnt
+
+mkdir -p /mnt/dev /mnt/proc /mnt/sys
+
+mount --bind /dev/ /mnt/dev/
+mount --bind /proc/ /mnt/proc/
+mount --bind /sys/ /mnt/sys/
+
+apk add --initdb --root /mnt/ --repository /root/moonflower/apks/ --keys-dir /root/moonflower/apkroot/etc/apk/keys/ \
+	linux-lts alpine-base linux-firmware-none grub grub-bios nano \
+	eudev eudev-openrc udev-init-scripts udev-init-scripts-openrc \
+	xorg-server xfce4 xfce4-terminal mesa xf86-input-libinput virtualbox-guest-additions \
+	openssh
+
+echo 'GRUB_CMDLINE_LINUX_DEFAULT="modules=ext4 quiet"' >> /mnt/etc/default/grub
+
+chroot /mnt/ grub-mkconfig -o /boot/grub/grub.cfg /dev/sda
+chroot /mnt/ grub-install /dev/sda
+
+chroot /mnt/ rc-update add devfs sysinit
+chroot /mnt/ rc-update add dmesg sysinit
+chroot /mnt/ rc-update add udev sysinit
+chroot /mnt/ rc-update add udev-settle sysinit
+chroot /mnt/ rc-update add udev-trigger sysinit
+chroot /mnt/ rc-update add hwdrivers sysinit
+chroot /mnt/ rc-update add modloop sysinit
+
+chroot /mnt/ rc-update add hwclock boot
+chroot /mnt/ rc-update add modules boot
+chroot /mnt/ rc-update add sysctl boot
+chroot /mnt/ rc-update add hostname boot
+chroot /mnt/ rc-update add bootmisc boot
+chroot /mnt/ rc-update add syslog boot
+
+chroot /mnt/ rc-update add mount-ro shutdown
+chroot /mnt/ rc-update add killprocs shutdown
+chroot /mnt/ rc-update add savecache shutdown
+
+#rc_add local default
+chroot /mnt/ rc-update add udev-postmount default
+chroot /mnt/ rc-update add dbus default
+chroot /mnt/ rc-update add virtualbox-guest-additions default

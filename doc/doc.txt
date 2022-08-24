@@ -24,3 +24,11 @@ BOOT_IMAGE=vmlinuz-lts root=UUID=c91cd526-8ebc-40f7-862e-291be56c3055 modules=sd
 ---
 
 needed: mesa-dri-gallium lsblk pv
+
+---
+
+kernel cmd line:
+
+root=UUID=... modules=sd-mod,usb-storage,ext4 quiet rootfstype=ext4 initrd=initramfs-lts
+
+GRUB_CMDLINE_LINUX_DEFAULT="modules=sd-mod,usb-storage,ext4 quiet rootfstype=ext4 initrd=initramfs-lts"
