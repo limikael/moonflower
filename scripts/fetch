@@ -352,7 +352,8 @@ mesa-dri-gallium \
 lsblk \
 pv \
 mandoc \
-man-pages
+man-pages \
+xfce4-docklike-plugin
 
 rm ./apks/x86_64/APKINDEX.tar.gz
 apk --root=apkroot index -o apks/x86_64/APKINDEX.tar.gz --rewrite-arch x86_64 apks/x86_64/*.apk

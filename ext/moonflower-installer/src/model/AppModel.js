@@ -3,15 +3,15 @@ import {timezones} from "../data/timezones.js";
 import {call,spawn} from "wun:subprocess";
 import fs from "wun:fs";
 import DiskModel from "./DiskModel.js";
-import SubprocessModel from "./SubprocessModel.js";
+import InstallModel from "./InstallModel.js";
 
 export default class AppModel extends EventEmitter {
 	constructor(routes) {
 		super();
 
 		this.routes=routes;
-//		this.currentRouteIndex=6;
-		this.currentRouteIndex=0;
+		this.currentRouteIndex=5;
+//		this.currentRouteIndex=0;
 
 		this.keyboardLayout="us";
 		this.keyboardVariant="us";
@@ -26,7 +26,10 @@ export default class AppModel extends EventEmitter {
 		this.diskModel.on("change",this.onDiskModelChange);
 		this.diskModel.updateDiskInfo();
 
-		this.subprocessModel=new SubprocessModel();
+		this.installModel=new InstallModel(this);
+		this.installModel.on("change",()=>{
+			this.emit("change");
+		});
 	}
 
 	onDiskModelChange=()=>{
@@ -158,42 +161,7 @@ export default class AppModel extends EventEmitter {
 		this.diskModel.setAutoUpdate(value);
 	}
 
-
 	startInstallation=()=>{
-		if (this.subprocessModel.isStarted())
-			return;
-
-		this.generateAnswerFile();
-		this.subprocessModel.startInstallation();
-	}
-
-	getDiskParams=()=>{
-		switch (this.installMethod) {
-			case "disk":
-				return this.installDisk;
-				break;
-		}
-
-		throw new Error("only disk supported");
-	}
-
-	generateAnswerFile=()=>{
-		let answerFileContents=
-`
-KEYMAPOPTS="${this.keyboardLayout+" "+this.keyboardVariant}"
-HOSTNAMEOPTS=moonflower
-DEVDOPTS=udev
-INTERFACESOPTS=none
-TIMEZONEOPTS="${this.getTimezoneString()}"
-PROXYOPTS=none
-APKREPOSOPTS="/root/moonflower/apks"
-USEROPTS="-a -u -g audio,video,netdev juser"
-SSHDOPTS=openssh
-NTPOPTS=none
-DISKOPTS="-m sys ${this.getDiskParams()}"
-LBUOPTS=none
-APKCACHEOPTS=none
-`;
-		fs.writeFileSync("/tmp/moonflower-install.txt",answerFileContents);
+		this.installModel.start();
 	}
 }

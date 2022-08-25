@@ -1,7 +1,7 @@
-import DiskModel from "../../src/model/DiskModel.js";
+/*import DiskModel from "../../src/model/DiskModel.js";
 
 describe("DiskModel",()=>{
-	/*it("works",()=>{
+	it("works",()=>{
 		let diskModel=new DiskModel();
 		diskModel.data=
 			{
@@ -114,7 +114,7 @@ describe("DiskModel",()=>{
 		console.log(diskModel.getDisksWithUnmountedParts());
 
 		console.log(diskModel.getUnmountedParts("/dev/sdc"));
-	});*/
+	});
 
 	it("works",()=>{
 		let diskModel=new DiskModel();
@@ -124,4 +124,4 @@ describe("DiskModel",()=>{
 		console.log(diskModel.getUnmountedDisks());
 
 	});
-})
+})*/
