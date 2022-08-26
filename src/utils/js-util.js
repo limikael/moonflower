@@ -7,3 +7,9 @@ export function exValue(fn) {
 		fn(event.target.value);
 	}
 }
+
+export function delay(millis) {
+	return new Promise((resolve,reject)=>{
+		setTimeout(resolve,millis);
+	});
+}
