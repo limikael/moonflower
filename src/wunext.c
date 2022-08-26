@@ -7,6 +7,22 @@
 #include <gio/gunixfdlist.h>
 #include "wunext.h"
 
+static gboolean wunext_on_signal(GIOChannel *source, GIOCondition cond, gpointer data) {
+	WUNEXT *wunext=data;
+	int fd=g_io_channel_unix_get_fd(source);
+	unsigned char sigdata;
+	int sig;
+
+	read(fd,&sigdata,1);
+	sig=sigdata;
+
+	JSCValue *sys=jsc_context_get_value(wunext->context,"sys");
+	JSCValue *emit=jsc_value_object_get_property(sys,"emit");
+	JSCValue *ret=jsc_value_function_call(emit,G_TYPE_INT,sig,G_TYPE_INT,sig,G_TYPE_NONE);
+
+	return TRUE;
+}
+
 static gboolean wunext_on_watch(GIOChannel *source, GIOCondition cond, gpointer data) {
 	WUNEXT *wunext=data;
 	int fd=g_io_channel_unix_get_fd(source);
@@ -133,6 +149,7 @@ static void sys_watch(int fd, int cond, JSCValue *cb, WUNEXT *wunext) {
 static JSCValue *sys_readCharCodeArray(int fd, int size, WUNEXT *wunext) {
 	unsigned char *data=g_malloc(size);
 	int actualsize=read(fd,data,size);
+
 	if (actualsize==-1) {
 		wunext_throw(wunext,"read");
 		g_free(data);
@@ -223,14 +240,28 @@ static void sys_dup2(int a, int b, WUNEXT *wunext) {
 		wunext_throw(wunext,"dup2");
 }
 
-static int sys_waitpid(int pid, WUNEXT *wunext) {
+static JSCValue *sys_waitpid(int pid, int flags, WUNEXT *wunext) {
+	if (pid<=0) {
+		jsc_context_throw_exception(wunext->context,jsc_exception_new_printf(
+			wunext->context,
+			"waitpid: need pid"
+		));
+		return NULL;
+	}
+
 	int status;
-	int res=waitpid(pid,&status,0);
+	int res=waitpid(pid,&status,flags);
 
-	if (res==-1)
+	if (res==-1) {
+		printf("waidpiderror: %d\n",errno);
 		wunext_throw(wunext,"waitpid");
+		return NULL;
+	}
 
-	return status;
+	if (res==0)
+		return jsc_value_new_undefined(wunext->context);
+
+	return jsc_value_new_number(wunext->context,status);
 }
 
 static void console_log(char *s) {
@@ -264,6 +295,23 @@ static void window_set_title(char *title, WUNEXT *wunext) {
 	webkit_web_extension_send_message_to_context(wunext->extension,message,NULL,NULL,NULL);
 }
 
+char *sys_event_emitter_code=
+"sys.__listeners={};"
+"sys.emit=(event, ...args)=>{"
+"  if (!sys.__listeners[event]) return;"
+"  for (let fn of [...sys.__listeners[event]]) fn(...args);"
+"}; "
+"sys.on=(event, fn)=>{"
+"  if (!sys.__listeners[event]) sys.__listeners[event]=[];"
+"  sys.__listeners[event].push(fn);"
+"}; "
+"sys.off=(event, fn)=>{"
+"  if (!sys.__listeners[event]) return;"
+"  let index=sys.__listeners[event].indexOf(fn);"
+"  for (; index>=0; index=sys.__listeners[event].indexOf(fn)) sys.__listeners[event].splice(index,1);"
+"  if (!sys.__listeners[event].length) delete sys.__listeners[event];"
+"}; ";
+
 static void 
 window_object_cleared_callback (WebKitScriptWorld *world, 
 								WebKitWebPage     *web_page, 
@@ -277,6 +325,8 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 
 	JSCValue *sys=jsc_value_new_object(context,NULL,NULL);
 	jsc_context_set_value(context,"sys",sys);
+
+	JSCValue *r=jsc_context_evaluate(context,sys_event_emitter_code,-1);
 
 	jsc_value_object_set_property(sys,"O_NONBLOCK",jsc_value_new_number(context,O_NONBLOCK));
 	jsc_value_object_set_property(sys,"O_RDONLY",jsc_value_new_number(context,O_RDONLY));
@@ -295,6 +345,9 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 	jsc_value_object_set_property(sys,"STDIN_FILENO",jsc_value_new_number(context,STDIN_FILENO));
 	jsc_value_object_set_property(sys,"STDOUT_FILENO",jsc_value_new_number(context,STDOUT_FILENO));
 	jsc_value_object_set_property(sys,"STDERR_FILENO",jsc_value_new_number(context,STDERR_FILENO));
+
+	jsc_value_object_set_property(sys,"SIGCHLD",jsc_value_new_number(context,SIGCHLD));
+	jsc_value_object_set_property(sys,"WNOHANG",jsc_value_new_number(context,WNOHANG));
 
 	jsc_value_object_set_property(sys,"open",
 		jsc_value_new_function(context,"open",G_CALLBACK(sys_open),wunext,NULL,G_TYPE_INT,2,G_TYPE_STRING,G_TYPE_INT)
@@ -333,7 +386,7 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 	);
 
 	jsc_value_object_set_property(sys,"waitpid",
-		jsc_value_new_function(context,"waitpid",G_CALLBACK(sys_waitpid),wunext,NULL,G_TYPE_INT,1,G_TYPE_INT)
+		jsc_value_new_function(context,"waitpid",G_CALLBACK(sys_waitpid),wunext,NULL,JSC_TYPE_VALUE,2,G_TYPE_INT,G_TYPE_INT)
 	);
 
 	jsc_value_object_set_property(sys,"exit",
@@ -368,13 +421,31 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 		G_TYPE_STRING,G_CALLBACK(window_get_title),G_CALLBACK(window_set_title),wunext,NULL);
 }
 
-G_MODULE_EXPORT void
-webkit_web_extension_initialize (WebKitWebExtension *extension)
-{
+static int wunext_signal_pipe=-1;
+static void wunext_signal_handler(int sig) {
+	unsigned char data=sig;
+	write(wunext_signal_pipe,&data,1);
+}
+
+G_MODULE_EXPORT void webkit_web_extension_initialize(WebKitWebExtension *extension) {
+	if (wunext_signal_pipe!=-1) {
+		printf("Warning: webkit_web_extension_initialize called twice\n");
+	}
+
+	//printf("sigchld: %d\n",SIGCHLD);
+
 	WUNEXT *wunext=g_malloc(sizeof(WUNEXT));
+	int pipes[2];
+	pipe(pipes);
+	wunext_signal_pipe=pipes[1];
+
+	wunext->signal_channel=g_io_channel_unix_new(pipes[0]);
+	wunext->signal_source=g_io_add_watch(wunext->signal_channel,G_IO_IN,wunext_on_signal,wunext);
 
 	wunext->extension=extension;
 	wunext->watch_by_fd=g_hash_table_new(g_direct_hash,g_direct_equal);
+
+	signal(SIGCHLD,wunext_signal_handler);
 
 	g_signal_connect(
 		webkit_script_world_get_default(),
