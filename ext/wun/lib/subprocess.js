@@ -22,12 +22,21 @@ export class Subprocess extends EventEmitter {
 			sys.close(stderr[0]);
 			sys.dup2(stdout[1],sys.STDOUT_FILENO);
 			sys.dup2(stderr[1],sys.STDERR_FILENO);
-			sys.exec(this.cmd,this.params);
-			sys.exit(1);
+
+			try {
+				sys.exec(this.cmd,this.params);
+			}
+
+			catch (e) {
+				if (e.message)
+					sys.writeCharCodeArray(sys.STDERR_FILENO,e.message.split("").map(c=>c.charCodeAt(0)));
+			}
+			sys._exit(-1);
 		}
 
 		// Parent
 		else {
+			//console.log("pid: "+this.pid);
 			sys.close(stdout[1]);
 			sys.close(stderr[1]);
 			this.stdout=new Stream(stdout[0],this.options);
