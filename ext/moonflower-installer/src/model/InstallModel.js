@@ -43,6 +43,7 @@ export default class InstallModel extends EventEmitter {
 			this.state="complete";
 			this.emit("change");
 		}).catch((e)=>{
+			console.log("caught..");
 			console.log("caught error: "+e.message);
 
 			this.state="error";
@@ -59,11 +60,11 @@ export default class InstallModel extends EventEmitter {
 
 	async getFirstPartFromDisk(disk) {
 		let part;
-		console.log("calling lsblk");
+		//console.log("calling lsblk");
 		let out=await call("/bin/lsblk",["-JT","-opath,type",disk]);
-		console.log("got: "+out);
+		//console.log("got: "+out);
 		let data=JSON.parse(out);
-		console.log("got data from lsblk");
+		//console.log("got data from lsblk");
 
 		for (let diskData of data.blockdevices) {
 			if (diskData.path==disk)
@@ -79,14 +80,14 @@ export default class InstallModel extends EventEmitter {
 
 	run=async ()=>{
 		await delay(0);
-		if (this.appModel.installMethod!="disk")
+		/*if (this.appModel.installMethod!="disk")
 			throw new Error("Only disk install supported");
 
 		if (!this.appModel.installDisk)
-			throw new Error("No install disk selected");
+			throw new Error("No install disk selected");*/
 
 		this.progress(10,"Making partitions on "+this.appModel.installDisk);
-		await call("/bin/sh",["-c",'printf "1M,1G,,*" | sfdisk '+this.appModel.installDisk]);
+		await call("/bin/shxx",["-c",'printf "1M,1G,,*" | sfdisk '+this.appModel.installDisk]);
 		this.progress(10,"Partitioning done...");
 
 		this.appModel.installPart=await this.getFirstPartFromDisk(this.appModel.installDisk);
@@ -104,9 +105,12 @@ export default class InstallModel extends EventEmitter {
 
 		this.progress(50,"Installing packages...");
 		let [rd,wt]=sys.pipe();
-		let rdStream=new Stream(rd);
+		let rdStream=new Stream(rd,{lines: true});
 		rdStream.on("data",(data)=>{
-			console.log("data: "+data);
+			let [current,total]=data.split("/");
+			current=Number(current); total=Number(total);
+			let percent=Math.round(100*(current/total));
+			console.log("percent: "+percent);
 		});
 		await call("/sbin/apk",[
 			"--no-cache",
@@ -126,7 +130,7 @@ export default class InstallModel extends EventEmitter {
 
 		this.progress(100,"Unmounting filesystems...");
 		for (let chrootMount of this.chrootMounts)
-			await call("/bin/umount",["/mnt/"+chrootMount]);
+			await call("/bin/umounts",["/mnt/"+chrootMount]);
 
 		await call("/bin/umount",["/mnt"]);
 		await delay(1000);
