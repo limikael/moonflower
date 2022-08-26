@@ -2,20 +2,26 @@ import EventEmitter from "wun:events";
 import Stream from "wun:stream";
 
 export class Subprocess extends EventEmitter {
-	constructor(cmd, params=[]) {
+	constructor(cmd, params=[], options={}) {
 		super();
 		this.cmd=cmd;
 		this.params=params;
+		this.options=options;
 		this.run();
 	}
 
-	run() {
+	run=()=>{
+		sys.on(sys.SIGCHLD,this.onSigchld);
 		let stdout=sys.pipe();
+		let stderr=sys.pipe();
 		this.pid=sys.fork();
 
 		// Child
 		if (!this.pid) {
+			sys.close(stdout[0]);
+			sys.close(stderr[0]);
 			sys.dup2(stdout[1],sys.STDOUT_FILENO);
+			sys.dup2(stderr[1],sys.STDERR_FILENO);
 			sys.exec(this.cmd,this.params);
 			sys.exit(1);
 		}
@@ -23,23 +29,40 @@ export class Subprocess extends EventEmitter {
 		// Parent
 		else {
 			sys.close(stdout[1]);
-			this.stdout=new Stream(stdout[0]);
-			this.stdout.on("close",this.onClose);
-			this.stdout.on("data",(data)=>{
-				this.emit("stdout",data);
-				this.emit("data",data);
-			});
+			sys.close(stderr[1]);
+			this.stdout=new Stream(stdout[0],this.options);
+			this.stdout.on("data",this.onStdout);
+			this.stderr=new Stream(stderr[0],this.options);
+			this.stderr.on("data",this.onStderr);
 		}
 	}
 
-	onClose=()=>{
-		this.status=sys.waitpid(this.pid);
-		this.emit("close",this.status);
+	onStdout=(data)=>{
+		this.emit("stdout",data);
+		this.emit("data",data);
+	}
+
+	onStderr=(data)=>{
+		this.emit("stderr",data);
+		this.emit("data",data);
+	}
+
+	onSigchld=()=>{
+		let status=sys.waitpid(this.pid,sys.WNOHANG);
+		if (status!==undefined) {
+			sys.off(sys.SIGCHLD,this.onSigchld);
+			this.stdout.flush();
+			this.stdout.close();
+			this.stderr.flush();
+			this.stderr.close();
+			this.status=status;
+			this.emit("close",this.status);
+		}
 	}
 }
 
-export function spawn(cmd, params=[]) {
-	return new Subprocess(cmd,params);
+export function spawn(cmd, params=[], options={}) {
+	return new Subprocess(cmd,params,options);
 }
 
 export function call(cmd, params=[], options={}) {

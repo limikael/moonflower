@@ -54,3 +54,29 @@ export default class StringDecoder {
 		this.tmpBuffer=[];
 	}
 }
+
+export class LineSplitter {
+	constructor() {
+		this.tmpBuffer="";
+	}
+
+	write(data) {
+		if (data)
+			this.tmpBuffer+=data;
+
+		let a=this.tmpBuffer.split("\n")
+		this.tmpBuffer=a.slice(a.length-1)[0];
+
+		return a.slice(0,a.length-1);
+	}
+
+	end(data) {
+		let a=this.write(data);
+
+		if (this.tmpBuffer)
+			a=[...a,this.tmpBuffer];
+
+		this.tmpBuffer="";
+		return a;
+	}
+}
