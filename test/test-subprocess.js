@@ -17,7 +17,7 @@ el.value+="Testing subprocess...\n";
 //let subprocess=spawn("/bin/echo",["hello"]);
 //let subprocess=spawn("/usr/bin/cat",["/awefawfwefhello"]);
 //let subprocess=spawn("/usr/bin/ls");
-let subprocess=spawn("/usr/bin/ls",[],{lines: true});
+/*let subprocess=spawn("/usr/bin/lsasdasd",[],{lines: true});
 subprocess.on("data",(data)=>{
 	console.log("data: "+data);
 	el.value+=data;
@@ -26,4 +26,18 @@ subprocess.on("data",(data)=>{
 subprocess.on("close",(status)=>{
 	el.value+="Process closed: "+status+"\n";
 	console.log("Process closed: "+status);
-});
+});*/
+
+async function main() {
+	let v=await call("/awefawef/awef/awefawef",[],{expect: 0});
+	console.log("done: "+v);
+	/*let sub=spawn("/awefawef/awef/awefawef");
+	sub.on("data",(data)=>{
+		console.log("data: "+data);
+	});
+	sub.on("close",(res)=>{
+		console.log("close: "+res);
+	});*/
+}
+
+main();

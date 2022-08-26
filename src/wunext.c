@@ -261,7 +261,7 @@ static JSCValue *sys_waitpid(int pid, int flags, WUNEXT *wunext) {
 	if (res==0)
 		return jsc_value_new_undefined(wunext->context);
 
-	return jsc_value_new_number(wunext->context,status);
+	return jsc_value_new_number(wunext->context,WEXITSTATUS(status));
 }
 
 static void console_log(char *s) {
@@ -272,6 +272,10 @@ static void sys_exit(int code, WUNEXT *wunext) {
 	GVariant *variant=g_variant_new("(i)",code);
 	WebKitUserMessage *message=webkit_user_message_new("exit",variant);
 	webkit_web_extension_send_message_to_context(wunext->extension,message,NULL,NULL,NULL);
+}
+
+static void sys__exit(int code, WUNEXT *wunext) {
+	_exit(code);
 }
 
 static void window_resizeTo(int w, int h, WUNEXT *wunext) {
@@ -391,6 +395,10 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 
 	jsc_value_object_set_property(sys,"exit",
 		jsc_value_new_function(context,"exit",G_CALLBACK(sys_exit),wunext,NULL,G_TYPE_NONE,1,G_TYPE_INT)
+	);
+
+	jsc_value_object_set_property(sys,"_exit",
+		jsc_value_new_function(context,"_exit",G_CALLBACK(sys__exit),wunext,NULL,G_TYPE_NONE,1,G_TYPE_INT)
 	);
 
 	jsc_value_object_set_property(sys,"show",
