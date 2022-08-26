@@ -7,7 +7,7 @@
 #include <gio/gunixfdlist.h>
 #include "wunext.h"
 
-static gboolean wunext_on_signal(GIOChannel *source, GIOCondition cond, gpointer data) {
+/*static gboolean wunext_on_signal(GIOChannel *source, GIOCondition cond, gpointer data) {
 	WUNEXT *wunext=data;
 	int fd=g_io_channel_unix_get_fd(source);
 	unsigned char sigdata;
@@ -21,7 +21,7 @@ static gboolean wunext_on_signal(GIOChannel *source, GIOCondition cond, gpointer
 	JSCValue *ret=jsc_value_function_call(emit,G_TYPE_INT,sig,G_TYPE_INT,sig,G_TYPE_NONE);
 
 	return TRUE;
-}
+}*/
 
 static gboolean wunext_on_watch(GIOChannel *source, GIOCondition cond, gpointer data) {
 	WUNEXT *wunext=data;
@@ -193,11 +193,23 @@ static int sys_writeCharCodeArray(int fd, JSCValue *data, WUNEXT *wunext) {
 	return res;
 }
 
+static void wunext_on_child_exit(GPid pid, int status, gpointer data) {
+	WUNEXT *wunext=data;
+
+	JSCValue *sys=jsc_context_get_value(wunext->context,"sys");
+	JSCValue *emit=jsc_value_object_get_property(sys,"emit");
+	JSCValue *ret=jsc_value_function_call(emit,G_TYPE_STRING,"child",G_TYPE_INT,pid,G_TYPE_INT,status,G_TYPE_NONE);
+}
+
 static int sys_fork(WUNEXT *wunext) {
 	int res=fork();
 
 	if (res==-1)
 		wunext_throw(wunext,"fork");
+
+	if (res!=0) {
+		g_child_watch_add(res,wunext_on_child_exit,wunext);
+	}
 
 	return res;
 }
@@ -240,7 +252,7 @@ static void sys_dup2(int a, int b, WUNEXT *wunext) {
 		wunext_throw(wunext,"dup2");
 }
 
-static JSCValue *sys_waitpid(int pid, int flags, WUNEXT *wunext) {
+/*static JSCValue *sys_waitpid(int pid, int flags, WUNEXT *wunext) {
 	if (pid<=0) {
 		jsc_context_throw_exception(wunext->context,jsc_exception_new_printf(
 			wunext->context,
@@ -262,7 +274,7 @@ static JSCValue *sys_waitpid(int pid, int flags, WUNEXT *wunext) {
 		return jsc_value_new_undefined(wunext->context);
 
 	return jsc_value_new_number(wunext->context,WEXITSTATUS(status));
-}
+}*/
 
 static void console_log(char *s) {
 	printf("%s\n",s);
@@ -389,9 +401,9 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 		jsc_value_new_function(context,"dup2",G_CALLBACK(sys_dup2),wunext,NULL,G_TYPE_NONE,2,G_TYPE_INT,G_TYPE_INT)
 	);
 
-	jsc_value_object_set_property(sys,"waitpid",
+	/*jsc_value_object_set_property(sys,"waitpid",
 		jsc_value_new_function(context,"waitpid",G_CALLBACK(sys_waitpid),wunext,NULL,JSC_TYPE_VALUE,2,G_TYPE_INT,G_TYPE_INT)
-	);
+	);*/
 
 	jsc_value_object_set_property(sys,"exit",
 		jsc_value_new_function(context,"exit",G_CALLBACK(sys_exit),wunext,NULL,G_TYPE_NONE,1,G_TYPE_INT)
@@ -429,31 +441,10 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 		G_TYPE_STRING,G_CALLBACK(window_get_title),G_CALLBACK(window_set_title),wunext,NULL);
 }
 
-static int wunext_signal_pipe=-1;
-static void wunext_signal_handler(int sig) {
-	unsigned char data=sig;
-	write(wunext_signal_pipe,&data,1);
-}
-
 G_MODULE_EXPORT void webkit_web_extension_initialize(WebKitWebExtension *extension) {
-	if (wunext_signal_pipe!=-1) {
-		printf("Warning: webkit_web_extension_initialize called twice\n");
-	}
-
-	//printf("sigchld: %d\n",SIGCHLD);
-
 	WUNEXT *wunext=g_malloc(sizeof(WUNEXT));
-	int pipes[2];
-	pipe(pipes);
-	wunext_signal_pipe=pipes[1];
-
-	wunext->signal_channel=g_io_channel_unix_new(pipes[0]);
-	wunext->signal_source=g_io_add_watch(wunext->signal_channel,G_IO_IN,wunext_on_signal,wunext);
-
 	wunext->extension=extension;
 	wunext->watch_by_fd=g_hash_table_new(g_direct_hash,g_direct_equal);
-
-	signal(SIGCHLD,wunext_signal_handler);
 
 	g_signal_connect(
 		webkit_script_world_get_default(),

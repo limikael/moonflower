@@ -19,8 +19,6 @@ typedef struct {
 	WebKitWebExtension *extension;
 	JSCContext *context;
 	GHashTable *watch_by_fd;
-	GIOChannel *signal_channel;
-	int signal_source;
 } WUNEXT;
 
 #endif
