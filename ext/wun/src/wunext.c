@@ -6,8 +6,16 @@
 #include <sys/stat.h>
 #include <gio/gunixfdlist.h>
 #include "wunext.h"
+#include <sys/signalfd.h>
+#include <spawn.h>
 
-/*static gboolean wunext_on_signal(GIOChannel *source, GIOCondition cond, gpointer data) {
+static int wunext_signal_pipe=-1;
+static void wunext_signal_handler(int sig) {
+	unsigned char data=sig;
+	write(wunext_signal_pipe,&data,1);
+}
+
+static gboolean wunext_on_signal(GIOChannel *source, GIOCondition cond, gpointer data) {
 	WUNEXT *wunext=data;
 	int fd=g_io_channel_unix_get_fd(source);
 	unsigned char sigdata;
@@ -21,7 +29,7 @@
 	JSCValue *ret=jsc_value_function_call(emit,G_TYPE_INT,sig,G_TYPE_INT,sig,G_TYPE_NONE);
 
 	return TRUE;
-}*/
+}
 
 static gboolean wunext_on_watch(GIOChannel *source, GIOCondition cond, gpointer data) {
 	WUNEXT *wunext=data;
@@ -193,25 +201,61 @@ static int sys_writeCharCodeArray(int fd, JSCValue *data, WUNEXT *wunext) {
 	return res;
 }
 
-static void wunext_on_child_exit(GPid pid, int status, gpointer data) {
-	WUNEXT *wunext=data;
-
-	JSCValue *sys=jsc_context_get_value(wunext->context,"sys");
-	JSCValue *emit=jsc_value_object_get_property(sys,"emit");
-	JSCValue *ret=jsc_value_function_call(emit,G_TYPE_STRING,"child",G_TYPE_INT,pid,G_TYPE_INT,status,G_TYPE_NONE);
-}
-
 static int sys_fork(WUNEXT *wunext) {
 	int res=fork();
 
 	if (res==-1)
 		wunext_throw(wunext,"fork");
 
-	if (res!=0) {
-		g_child_watch_add(res,wunext_on_child_exit,wunext);
+	return res;
+}
+
+static int sys_pspawn(char *cmd, JSCValue *params, JSCValue *options, WUNEXT *wunext) {
+	int len=jsc_value_to_int32(jsc_value_object_get_property(params,"length"));
+	char *argv[len+2];
+
+	argv[0]=cmd;
+	for (int i=0; i<len; i++)
+		argv[i+1]=jsc_value_to_string(jsc_value_object_get_property_at_index(params,i));
+	argv[len+1]=NULL;
+
+	posix_spawn_file_actions_t actions;
+	posix_spawn_file_actions_init(&actions);
+
+	if (jsc_value_is_object(options)) {
+		JSCValue *dup=jsc_value_object_get_property(options,"dup");
+		if (jsc_value_is_object(dup)) {
+			int ndup=jsc_value_to_int32(jsc_value_object_get_property(dup,"length"));
+			for (int i=0; i<ndup/2; i++)
+				posix_spawn_file_actions_adddup2(&actions,
+					jsc_value_to_int32(jsc_value_object_get_property_at_index(dup,i*2)),
+					jsc_value_to_int32(jsc_value_object_get_property_at_index(dup,i*2+1))
+				);
+		}
+
+		JSCValue *cls=jsc_value_object_get_property(options,"close");
+		if (jsc_value_is_object(cls)) {
+			int ncls=jsc_value_to_int32(jsc_value_object_get_property(cls,"length"));
+			for (int i=0; i<ncls; i++)
+				posix_spawn_file_actions_addclose(&actions,
+					jsc_value_to_int32(jsc_value_object_get_property_at_index(cls,i))
+				);
+		}
 	}
 
-	return res;
+	int pid,res=posix_spawn(&pid,cmd,&actions,NULL,argv,NULL);
+
+	for (int i=0; i<len; i++)
+		g_free(argv[i+1]);
+
+	posix_spawn_file_actions_destroy(&actions);
+
+	if (res!=0) {
+		wunext_throw(wunext,"pspawn");
+		return -1;
+	}
+
+	return pid;
 }
 
 static void sys_exec(char *cmd, JSCValue *params, WUNEXT *wunext) {
@@ -219,13 +263,13 @@ static void sys_exec(char *cmd, JSCValue *params, WUNEXT *wunext) {
 	char *args[len+2];
 
 	args[0]=cmd;
-
 	for (int i=0; i<len; i++)
 		args[i+1]=jsc_value_to_string(jsc_value_object_get_property_at_index(params,i));
-
 	args[len+1]=NULL;
 
-	int res=execv(cmd,args);
+	char *env[1]={NULL};
+
+	int res=execve(cmd,args,env);
 	if (res==-1)
 		wunext_throw(wunext,"exec");
 }
@@ -252,7 +296,7 @@ static void sys_dup2(int a, int b, WUNEXT *wunext) {
 		wunext_throw(wunext,"dup2");
 }
 
-/*static JSCValue *sys_waitpid(int pid, int flags, WUNEXT *wunext) {
+static JSCValue *sys_waitpid(int pid, int flags, WUNEXT *wunext) {
 	if (pid<=0) {
 		jsc_context_throw_exception(wunext->context,jsc_exception_new_printf(
 			wunext->context,
@@ -274,10 +318,12 @@ static void sys_dup2(int a, int b, WUNEXT *wunext) {
 		return jsc_value_new_undefined(wunext->context);
 
 	return jsc_value_new_number(wunext->context,WEXITSTATUS(status));
-}*/
+}
 
 static void console_log(char *s) {
-	printf("%s\n",s);
+	char *t=g_strdup_printf("%s\n",s);
+	write(STDOUT_FILENO,t,strlen(t));
+	g_free(t);
 }
 
 static void sys_exit(int code, WUNEXT *wunext) {
@@ -294,6 +340,10 @@ static void window_resizeTo(int w, int h, WUNEXT *wunext) {
 	GVariant *variant=g_variant_new("(ii)",w,h);
 	WebKitUserMessage *message=webkit_user_message_new("resize",variant);
 	webkit_web_extension_send_message_to_context(wunext->extension,message,NULL,NULL,NULL);
+}
+
+static int sys_getpid(WUNEXT *wunext) {
+	return getpid();
 }
 
 static void sys_show(WUNEXT *wunext) {
@@ -385,6 +435,10 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 		jsc_value_new_function(context,"writeCharCodeArray",G_CALLBACK(sys_writeCharCodeArray),wunext,NULL,G_TYPE_INT,2,G_TYPE_INT,JSC_TYPE_VALUE)
 	);
 
+	jsc_value_object_set_property(sys,"pspawn",
+		jsc_value_new_function(context,"pspawn",G_CALLBACK(sys_pspawn),wunext,NULL,G_TYPE_INT,3,G_TYPE_STRING,JSC_TYPE_VALUE,JSC_TYPE_VALUE)
+	);
+
 	jsc_value_object_set_property(sys,"fork",
 		jsc_value_new_function(context,"fork",G_CALLBACK(sys_fork),wunext,NULL,G_TYPE_INT,0)
 	);
@@ -397,13 +451,17 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 		jsc_value_new_function(context,"pipe",G_CALLBACK(sys_pipe),wunext,NULL,JSC_TYPE_VALUE,0)
 	);
 
+	jsc_value_object_set_property(sys,"getpid",
+		jsc_value_new_function(context,"getpid",G_CALLBACK(sys_getpid),wunext,NULL,G_TYPE_INT,0)
+	);
+
 	jsc_value_object_set_property(sys,"dup2",
 		jsc_value_new_function(context,"dup2",G_CALLBACK(sys_dup2),wunext,NULL,G_TYPE_NONE,2,G_TYPE_INT,G_TYPE_INT)
 	);
 
-	/*jsc_value_object_set_property(sys,"waitpid",
+	jsc_value_object_set_property(sys,"waitpid",
 		jsc_value_new_function(context,"waitpid",G_CALLBACK(sys_waitpid),wunext,NULL,JSC_TYPE_VALUE,2,G_TYPE_INT,G_TYPE_INT)
-	);*/
+	);
 
 	jsc_value_object_set_property(sys,"exit",
 		jsc_value_new_function(context,"exit",G_CALLBACK(sys_exit),wunext,NULL,G_TYPE_NONE,1,G_TYPE_INT)
@@ -442,9 +500,19 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 }
 
 G_MODULE_EXPORT void webkit_web_extension_initialize(WebKitWebExtension *extension) {
+	if (wunext_signal_pipe!=-1)
+		printf("Warning: webkit_web_extension_initialize called twice\n");
+
 	WUNEXT *wunext=g_malloc(sizeof(WUNEXT));
 	wunext->extension=extension;
 	wunext->watch_by_fd=g_hash_table_new(g_direct_hash,g_direct_equal);
+
+	int pipes[2];
+	pipe(pipes);
+	wunext_signal_pipe=pipes[1];
+	wunext->signal_channel=g_io_channel_unix_new(pipes[0]);
+	wunext->signal_source=g_io_add_watch(wunext->signal_channel,G_IO_IN,wunext_on_signal,wunext);
+	signal(SIGCHLD,wunext_signal_handler);
 
 	g_signal_connect(
 		webkit_script_world_get_default(),
