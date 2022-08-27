@@ -87,7 +87,7 @@ export default class InstallModel extends EventEmitter {
 			throw new Error("No install disk selected");*/
 
 		this.progress(10,"Making partitions on "+this.appModel.installDisk);
-		await call("/bin/shxx",["-c",'printf "1M,1G,,*" | sfdisk '+this.appModel.installDisk]);
+		await call("/bin/sh",["-c",'printf "1M,1G,,*" | sfdisk '+this.appModel.installDisk]);
 		this.progress(10,"Partitioning done...");
 
 		this.appModel.installPart=await this.getFirstPartFromDisk(this.appModel.installDisk);
@@ -130,7 +130,7 @@ export default class InstallModel extends EventEmitter {
 
 		this.progress(100,"Unmounting filesystems...");
 		for (let chrootMount of this.chrootMounts)
-			await call("/bin/umounts",["/mnt/"+chrootMount]);
+			await call("/bin/umount",["/mnt/"+chrootMount]);
 
 		await call("/bin/umount",["/mnt"]);
 		await delay(1000);
