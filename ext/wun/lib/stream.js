@@ -15,7 +15,7 @@ export default class Stream extends EventEmitter {
 	}
 
 	readChunk=()=>{
-		let s,data=sys.readCharCodeArray(this.fd,4096);
+		let s,data=sys.read(this.fd,4096);
 		if (data===null)
 			s=this.decoder.end();
 

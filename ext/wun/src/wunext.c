@@ -154,7 +154,7 @@ static void sys_watch(int fd, int cond, JSCValue *cb, WUNEXT *wunext) {
 	}
 }
 
-static JSCValue *sys_readCharCodeArray(int fd, int size, WUNEXT *wunext) {
+static JSCValue *sys_read(int fd, int size, WUNEXT *wunext) {
 	unsigned char *data=g_malloc(size);
 	int actualsize=read(fd,data,size);
 
@@ -174,14 +174,16 @@ static JSCValue *sys_readCharCodeArray(int fd, int size, WUNEXT *wunext) {
 		g_ptr_array_add(array,jsc_value_new_number(wunext->context,data[i]));
 
 	JSCValue *v=jsc_value_new_array_from_garray(wunext->context,array);
+	JSCValue *Uint8Array=jsc_context_get_value(wunext->context,"Uint8Array");
+	JSCValue *res=jsc_value_constructor_call(Uint8Array,JSC_TYPE_VALUE,v,G_TYPE_NONE);
 
 	g_free(data);
 	g_ptr_array_free(array,TRUE);
 
-	return v;
+	return res;
 }
 
-static int sys_writeCharCodeArray(int fd, JSCValue *data, WUNEXT *wunext) {
+static int sys_write(int fd, JSCValue *data, WUNEXT *wunext) {
 	int len=jsc_value_to_int32(jsc_value_object_get_property(data,"length"));
 	unsigned char *buf=g_malloc(len);
 
@@ -427,12 +429,12 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 		jsc_value_new_function(context,"watch",G_CALLBACK(sys_watch),wunext,NULL,G_TYPE_NONE,3,G_TYPE_INT,G_TYPE_INT,JSC_TYPE_VALUE)
 	);
 
-	jsc_value_object_set_property(sys,"readCharCodeArray",
-		jsc_value_new_function(context,"readCharCodeArray",G_CALLBACK(sys_readCharCodeArray),wunext,NULL,JSC_TYPE_VALUE,2,G_TYPE_INT,G_TYPE_INT)
+	jsc_value_object_set_property(sys,"read",
+		jsc_value_new_function(context,"read",G_CALLBACK(sys_read),wunext,NULL,JSC_TYPE_VALUE,2,G_TYPE_INT,G_TYPE_INT)
 	);
 
-	jsc_value_object_set_property(sys,"writeCharCodeArray",
-		jsc_value_new_function(context,"writeCharCodeArray",G_CALLBACK(sys_writeCharCodeArray),wunext,NULL,G_TYPE_INT,2,G_TYPE_INT,JSC_TYPE_VALUE)
+	jsc_value_object_set_property(sys,"write",
+		jsc_value_new_function(context,"write",G_CALLBACK(sys_write),wunext,NULL,G_TYPE_INT,2,G_TYPE_INT,JSC_TYPE_VALUE)
 	);
 
 	jsc_value_object_set_property(sys,"pspawn",

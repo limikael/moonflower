@@ -6,7 +6,7 @@ export function readFileSync(fn) {
 	let data,res="";
 
 	do {
-		data=sys.readCharCodeArray(fd,4096);
+		data=sys.read(fd,4096);
 		res+=decoder.write(data);
 	} while (data!==null);
 
@@ -18,11 +18,11 @@ export function readFileSync(fn) {
 
 export function writeFileSync(fn, content) {
 	let encoder=new TextEncoder();
-	let data=Array.from(encoder.encode(content));
+	let data=encoder.encode(content);
 
 	let fd=sys.open(fn,sys.O_WRONLY|sys.O_CREAT|sys.O_TRUNC);
 	while (data.length)
-		data.splice(0,sys.writeCharCodeArray(fd,data));
+		data=data.slice(sys.write(fd,data));
 
 	sys.close(fd);
 }
