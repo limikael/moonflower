@@ -14,16 +14,16 @@ export default class InstallModel extends EventEmitter {
 		this.message="";
 		this.state="none";
 
-		/*this.packages=[
+		this.packages=[
 			"linux-lts","alpine-base","linux-firmware-none","grub","grub-bios","nano",
 			"eudev","eudev-openrc","udev-init-scripts","udev-init-scripts-openrc",
 			"xorg-server","xfce4","xfce4-terminal","mesa","xf86-input-libinput",
 			"virtualbox-guest-additions","openssh"
-		];*/
-
-		this.packages=[
-			"acct"
 		];
+
+		/*this.packages=[
+			"acct"
+		];*/
 
 		this.chrootMounts=["dev","proc","sys"];
 	}
@@ -91,10 +91,10 @@ export default class InstallModel extends EventEmitter {
 		this.progress(10,"Partitioning done...");
 
 		this.appModel.installPart=await this.getFirstPartFromDisk(this.appModel.installDisk);
-		this.progress(30,"Making filesystem on "+this.appModel.installPart);
+		this.progress(20,"Making filesystem on "+this.appModel.installPart);
 		await call("/sbin/mkfs.ext4",["-F",this.appModel.installPart]);
 
-		this.progress(40,"Mounting filesystems...");
+		this.progress(30,"Mounting filesystems...");
 		await call("/bin/mount",["-text4","/dev/sda1","/mnt"]);
 
 		for (let chrootMount of this.chrootMounts)
@@ -103,14 +103,21 @@ export default class InstallModel extends EventEmitter {
 		for (let chrootMount of this.chrootMounts)
 			await call("/bin/mount",["--bind","/"+chrootMount,"/mnt/"+chrootMount]);
 
-		this.progress(50,"Installing packages...");
+		this.progress(40,"Installing packages...");
 		let [rd,wt]=sys.pipe();
 		let rdStream=new Stream(rd,{lines: true});
 		rdStream.on("data",(data)=>{
 			let [current,total]=data.split("/");
 			current=Number(current); total=Number(total);
 			let percent=Math.round(100*(current/total));
-			console.log("percent: "+percent);
+			if (percent==100) {
+				this.progress(80,"Configuring packages...");
+			}
+
+			else {
+				let installPercent=40+(80-40)*percent/100;
+				this.progress(installPercent,"Installing packages... "+percent+"%");
+			}
 		});
 		await call("/sbin/apk",[
 			"--no-cache",
@@ -122,17 +129,13 @@ export default class InstallModel extends EventEmitter {
 			...this.packages
 		]);
 
-		this.progress(60,"Step 3...");
-		await delay(1000);
-		this.progress(70,"Step 4...");
-		await delay(1000);
-		this.progress(100,"Step 5...");
-
-		this.progress(100,"Unmounting filesystems...");
+		this.progress(90,"Unmounting filesystems...");
 		for (let chrootMount of this.chrootMounts)
 			await call("/bin/umount",["/mnt/"+chrootMount]);
 
 		await call("/bin/umount",["/mnt"]);
+
+		this.progress(100,"Done");
 		await delay(1000);
 	}
 }
