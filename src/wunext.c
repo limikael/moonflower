@@ -215,6 +215,7 @@ static int sys_fork(WUNEXT *wunext) {
 static int sys_pspawn(char *cmd, JSCValue *params, JSCValue *options, WUNEXT *wunext) {
 	int len=jsc_value_to_int32(jsc_value_object_get_property(params,"length"));
 	char *argv[len+2];
+	char **envp=NULL;
 
 	argv[0]=cmd;
 	for (int i=0; i<len; i++)
@@ -243,13 +244,33 @@ static int sys_pspawn(char *cmd, JSCValue *params, JSCValue *options, WUNEXT *wu
 					jsc_value_to_int32(jsc_value_object_get_property_at_index(cls,i))
 				);
 		}
+
+		JSCValue *env=jsc_value_object_get_property(options,"env");
+		if (jsc_value_is_object(env)) {
+			char **envnames=jsc_value_object_enumerate_properties(env);
+			int nenv;
+
+			for (nenv=0; envnames[nenv]; nenv++)
+				;
+
+			envp=g_malloc(sizeof (char *)*(nenv+1));
+			for (int i=0; i<nenv; i++) {
+				JSCValue *v=jsc_value_object_get_property(env,envnames[i]);
+				envp[i]=g_strdup_printf("%s=%s",envnames[i],jsc_value_to_string(v));
+			}
+
+			envp[nenv]=NULL;
+
+			g_strfreev(envnames);
+		}
 	}
 
-	int pid,res=posix_spawn(&pid,cmd,&actions,NULL,argv,NULL);
+	int pid,res=posix_spawn(&pid,cmd,&actions,NULL,argv,envp);
 
 	for (int i=0; i<len; i++)
 		g_free(argv[i+1]);
 
+	g_strfreev(envp);
 	posix_spawn_file_actions_destroy(&actions);
 
 	if (res!=0) {
