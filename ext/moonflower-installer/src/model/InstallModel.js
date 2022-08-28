@@ -2,6 +2,7 @@ import {delay} from "../utils/js-util.js";
 import EventEmitter from "events";
 import {call} from "wun:subprocess";
 import Stream from "wun:stream";
+import fs from "wun:fs";
 
 export default class InstallModel extends EventEmitter {
 	constructor(appModel) {
@@ -18,14 +19,17 @@ export default class InstallModel extends EventEmitter {
 			"linux-lts","alpine-base","linux-firmware-none","grub","grub-bios","nano",
 			"eudev","eudev-openrc","udev-init-scripts","udev-init-scripts-openrc",
 			"xorg-server","xfce4","xfce4-terminal","mesa","xf86-input-libinput",
-			"virtualbox-guest-additions","openssh"
+			"virtualbox-guest-additions","openssh","lightdm-gtk-greeter"
 		];
 
-		/*this.packages=[
-			"acct"
-		];*/
-
 		this.chrootMounts=["dev","proc","sys"];
+
+		this.services={
+			"sysinit": ["devfs","dmesg","udev","udev-settle","udev-trigger","hwdrivers","modloop"],
+			"boot": ["hwclock","modules","sysctl","hostname","bootmisc","syslog"],
+			"shutdown": ["mount-ro","killprocs","savecache"],
+			"default": ["udev-postmount","dbus","virtualbox-guest-additions","lightdm"]
+		}
 	}
 
 	start=()=>{
@@ -80,21 +84,20 @@ export default class InstallModel extends EventEmitter {
 
 	run=async ()=>{
 		await delay(0);
-		/*if (this.appModel.installMethod!="disk")
+		if (this.appModel.installMethod!="disk")
 			throw new Error("Only disk install supported");
 
 		if (!this.appModel.installDisk)
-			throw new Error("No install disk selected");*/
+			throw new Error("No install disk selected");
 
 		this.progress(10,"Making partitions on "+this.appModel.installDisk);
 		await call("/bin/sh",["-c",'printf "1M,1G,,*" | sfdisk '+this.appModel.installDisk]);
-		this.progress(10,"Partitioning done...");
 
 		this.appModel.installPart=await this.getFirstPartFromDisk(this.appModel.installDisk);
-		this.progress(20,"Making filesystem on "+this.appModel.installPart);
+		this.progress(15,"Making filesystem on "+this.appModel.installPart);
 		await call("/sbin/mkfs.ext4",["-F",this.appModel.installPart]);
 
-		this.progress(30,"Mounting filesystems...");
+		this.progress(20,"Mounting filesystems...");
 		await call("/bin/mount",["-text4","/dev/sda1","/mnt"]);
 
 		for (let chrootMount of this.chrootMounts)
@@ -103,7 +106,12 @@ export default class InstallModel extends EventEmitter {
 		for (let chrootMount of this.chrootMounts)
 			await call("/bin/mount",["--bind","/"+chrootMount,"/mnt/"+chrootMount]);
 
-		this.progress(40,"Installing packages...");
+		this.progress(30,"Installing packages...");
+		await call("/bin/mkdir",["-p","/mnt/usr/sbin"]);
+		let s='#!/bin/sh\n\nPKGSYSTEM_ENABLE_FSYNC=0 /usr/bin/update-mime-database "$@"';
+		fs.writeFileSync("/mnt/usr/sbin/update-mime-database",s);
+		await call("/bin/chmod",["755","/mnt/usr/sbin/update-mime-database"]);
+
 		let [rd,wt]=sys.pipe();
 		let rdStream=new Stream(rd,{lines: true});
 		rdStream.on("data",(data)=>{
@@ -111,11 +119,11 @@ export default class InstallModel extends EventEmitter {
 			current=Number(current); total=Number(total);
 			let percent=Math.round(100*(current/total));
 			if (percent==100) {
-				this.progress(80,"Configuring packages...");
+				this.progress(70,"Configuring packages...");
 			}
 
 			else {
-				let installPercent=40+(80-40)*percent/100;
+				let installPercent=30+(70-30)*percent/100;
 				this.progress(installPercent,"Installing packages... "+percent+"%");
 			}
 		});
@@ -127,9 +135,28 @@ export default class InstallModel extends EventEmitter {
 			"--repository","/root/moonflower/apks",
 			"--keys-dir","/root/moonflower/apkroot/etc/apk/keys",
 			...this.packages
-		]);
+		],{
+			env: {
+				"PKGSYSTEM_ENABLE_FSYNC": 0
+			}
+		});
 
-		this.progress(90,"Unmounting filesystems...");
+		this.progress(80,"Enabling services...");
+		for (let runlevel in this.services) {
+			for (let service of this.services[runlevel]) {
+				await call("/usr/sbin/chroot",["/mnt/","/sbin/rc-update","add",service,runlevel]);
+			}
+		}
+
+		this.progress(90,"Installing bootloader...");
+		let t=await fs.readFileSync("/mnt/etc/default/grub")
+		t+='GRUB_CMDLINE_LINUX_DEFAULT="modules=ext4 quiet"\n';
+		await fs.writeFileSync("/mnt/etc/default/grub",t);
+
+		await call("/usr/sbin/chroot",["/mnt/","/usr/sbin/grub-mkconfig","-o","/boot/grub/grub.cfg",this.appModel.installDisk]);
+		await call("/usr/sbin/chroot",["/mnt/","/usr/sbin/grub-install",this.appModel.installDisk]);
+
+		this.progress(95,"Unmounting filesystems...");
 		for (let chrootMount of this.chrootMounts)
 			await call("/bin/umount",["/mnt/"+chrootMount]);
 
