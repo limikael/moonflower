@@ -353,7 +353,8 @@ lsblk \
 pv \
 mandoc \
 man-pages \
-xfce4-docklike-plugin
+xfce4-docklike-plugin \
+os-prober
 
 rm ./apks/x86_64/APKINDEX.tar.gz
 apk --root=apkroot index -o apks/x86_64/APKINDEX.tar.gz --rewrite-arch x86_64 apks/x86_64/*.apk

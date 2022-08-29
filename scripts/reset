@@ -1,5 +1,0 @@
-#!/usr/bin/bash
-
-VBoxManage controlvm Alpine poweroff
-cp vm/Alpine.fresh.vdi vm/Alpine.vdi
-VBoxManage startvm Alpine
