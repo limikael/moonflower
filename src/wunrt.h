@@ -12,6 +12,7 @@ typedef struct {
 	int width;
 	int height;
 	char *title;
+	char **argv;
 } WUNRT;
 
 WUNRT *wunrt_create();
@@ -21,5 +22,6 @@ void wunrt_set_library_path(WUNRT *wunrt, char *path);
 void wunrt_set_width(WUNRT *wunrt, int width);
 void wunrt_set_height(WUNRT *wunrt, int height);
 void wunrt_set_title(WUNRT *wunrt, char *title);
+void wunrt_set_argv(WUNRT *wunrt, char **argv);
 
 #endif

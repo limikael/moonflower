@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
 	WUNRT *wunrt=wunrt_create();
 	wunrt_set_library_path(wunrt,WUN_DEFAULT_LIBRARY_PATH);
 
-	char *short_options="l:w:h:t:";
+	char *short_options="+l:w:h:t:";
 	struct option long_options[]={
 		{"library-path",1,NULL,'l'},
 		{"width",1,NULL,'w'},
@@ -60,8 +60,16 @@ int main(int argc, char* argv[]) {
 		}
 	} while (next_option!=-1);
 
-	if (optind!=argc-1)
+	if (argc-optind<1)
 		usage();
+
+	char *sargv[argc-optind+2];
+	sargv[0]=argv[0];
+	for (int i=optind; i<argc; i++)
+		sargv[1+i-optind]=argv[i];
+
+	sargv[1+argc-optind]=NULL;
+	wunrt_set_argv(wunrt,sargv);
 
 	wunrt_set_uri(wunrt,argv[optind]);
 	wunrt_run(wunrt);
