@@ -66,7 +66,14 @@ virtualbox-guest-additions
 grub-bios
 grub
 e2fsprogs
+e2fsprogs-extra
 nano
+lsblk
+pv
+sfdisk
+wun
+mesa-dri-gallium
+xf86-video-vboxvideo
 EOF
 
 rc_add devfs sysinit

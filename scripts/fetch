@@ -26,6 +26,7 @@ dhcpcd \
 dhcpcd-openrc \
 e2fsprogs \
 e2fsprogs-libs \
+e2fsprogs-extra \
 gmp \
 gnutls \
 haveged \
@@ -354,7 +355,10 @@ pv \
 mandoc \
 man-pages \
 xfce4-docklike-plugin \
-os-prober
+os-prober \
+xf86-video-vboxvideo \
+gparted \
+
 
 rm ./apks/x86_64/APKINDEX.tar.gz
 apk --root=apkroot index -o apks/x86_64/APKINDEX.tar.gz --rewrite-arch x86_64 apks/x86_64/*.apk

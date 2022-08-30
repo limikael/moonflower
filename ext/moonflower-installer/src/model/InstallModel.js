@@ -19,7 +19,9 @@ export default class InstallModel extends EventEmitter {
 			"linux-lts","alpine-base","linux-firmware-none","grub","grub-bios","nano",
 			"eudev","eudev-openrc","udev-init-scripts","udev-init-scripts-openrc",
 			"xorg-server","xfce4","xfce4-terminal","mesa","xf86-input-libinput",
-			"virtualbox-guest-additions","openssh","lightdm-gtk-greeter"
+			"virtualbox-guest-additions","openssh","lightdm-gtk-greeter",
+
+			"mesa-dri-gallium","xf86-video-vboxvideo"
 		];
 
 		this.chrootMounts=["dev","proc","sys"];
@@ -28,7 +30,7 @@ export default class InstallModel extends EventEmitter {
 			"sysinit": ["devfs","dmesg","udev","udev-settle","udev-trigger","hwdrivers","modloop"],
 			"boot": ["hwclock","modules","sysctl","hostname","bootmisc","syslog"],
 			"shutdown": ["mount-ro","killprocs","savecache"],
-			"default": ["udev-postmount","dbus","virtualbox-guest-additions","lightdm"]
+			"default": ["udev-postmount","dbus","virtualbox-guest-additions","local","lightdm"]
 		}
 	}
 
@@ -80,6 +82,28 @@ export default class InstallModel extends EventEmitter {
 
 		console.log("part: "+part);
 		return part;
+	}
+
+	installLocalDebug=async ()=>{
+		let script=`
+			echo "Starting debug stuff..."
+
+			ifconfig eth0 up
+			udhcpc eth0
+
+			echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+			rc-service sshd restart
+
+			mkdir -p /root/.ssh
+			echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDH1/VRIVLxf0DZhSw+oktqqRBzhP9FayFRU8q+jFSozZez/MeqfgGNBCurbkJitoBf/BJm24XJgNw1gIXDzaxBR8dA6vspjF0rzoOGPKd4Y9CcVM+7r0R0LHLF9gtJIbzRXKjyXGPUnSwDPT1NSNf4ufyKlrSlyuDLBSD7mn/yGEGamKK8QwbZnAXuqUN399Ym21zhzaSiWhW2BF2poZ0yiVMaU3ioeCQ8xgPCrjejNYL8VTNm3kUbmOpaDeb/zRwkwcUgrfPbGsGNyC6+j0Pn1fCg8aaFQviHmIgZDxnR3vhvgOJxNgpeA2mbFlfoqfj3QptT2g636Ew2yn2/Uda3t7DB0zcgZCjDy6attzbLfAtp/lHQEAcL3wNwEMniw0I+Mbf5NKC6Dj8QS2kJTHwl0dqssNiRc3CvaK7nfDzTrk0q6T7DRUAPy9Q9vrXEkRztP1px9vGto+fGZCMVzJwoj+dRTBmwy44T4GD05d1BwUMybq4I0fDSJMO36Z+TKis= micke@micke-x455ya" > /root/.ssh/authorized_keys
+
+			mkdir -p /root/moonflower
+			mount.vboxsf moonflower /root/moonflower
+		`;
+
+		await call("/bin/mkdir",["-p","/mnt/etc/local.d/"]);
+		fs.writeFileSync("/mnt/etc/local.d/main.start",script);
+		await call("/bin/chmod",["755","/mnt/etc/local.d/main.start"]);
 	}
 
 	run=async ()=>{
@@ -140,6 +164,8 @@ export default class InstallModel extends EventEmitter {
 				"PKGSYSTEM_ENABLE_FSYNC": 0
 			}
 		});
+
+		await this.installLocalDebug();
 
 		this.progress(80,"Enabling services...");
 		for (let runlevel in this.services) {
