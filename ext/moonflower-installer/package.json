@@ -2,7 +2,7 @@
 	"name": "moonflower-installer",
 	"scripts": {
 		"build": "esbuild --loader:.css=dataurl --minify --external:wun:* --jsx-factory=h --jsx-fragment=Fragment --bundle --format=esm --outfile=bin/moonflower-installer --inject:src/utils/preact-shim.js src/app/installer-main.jsx",
-		"dev": "yarn build && ./bin/moonflower-installer",
+		"dev": "yarn build && ./bin/moonflower-installer --mock",
 		"gen": "(tools/fetchapks.sh || true) && tools/mkkeymaps.js",
 		"postinstall": "link-module-alias",
 		"test": "jasmine"

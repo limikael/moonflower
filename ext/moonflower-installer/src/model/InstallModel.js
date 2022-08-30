@@ -3,6 +3,7 @@ import EventEmitter from "events";
 import {call} from "wun:subprocess";
 import Stream from "wun:stream";
 import fs from "wun:fs";
+import path from "wun:path";
 
 export default class InstallModel extends EventEmitter {
 	constructor(appModel) {
@@ -31,11 +32,15 @@ export default class InstallModel extends EventEmitter {
 			"shutdown": ["mount-ro","killprocs","savecache"],
 			"default": ["udev-postmount","dbus","virtualbox-guest-additions","local","lightdm"]
 		}
+
+		this.mock=sys.argv.includes("--mock");
 	}
 
 	start=()=>{
 		if (this.state!="none")
 			throw new Error("Already running");
+
+		console.log("Starting install, mock="+this.mock);
 
 		this.state="running";
 		this.percent=0;
@@ -64,13 +69,9 @@ export default class InstallModel extends EventEmitter {
 	}
 
 	async getFirstPartFromDisk(disk) {
-		let part;
-		//console.log("calling lsblk");
-		let out=await call("/bin/lsblk",["-JT","-opath,type",disk]);
-		//console.log("got: "+out);
-		let data=JSON.parse(out);
-		//console.log("got data from lsblk");
+		let data=JSON.parse(await call("/bin/lsblk",["-JT","-opath,type",disk]));
 
+		let part;
 		for (let diskData of data.blockdevices) {
 			if (diskData.path==disk)
 				part=diskData.children[0].path
@@ -81,6 +82,41 @@ export default class InstallModel extends EventEmitter {
 
 		console.log("part: "+part);
 		return part;
+	}
+
+	readFile=async (fn)=>{
+		if (this.mock) {
+			console.log("Reading: "+fn);
+			await delay(100);
+			return "";
+		}
+
+		return fs.readFileSync(fn);
+	}
+
+	writeFile=async (fn, content, options={})=>{
+		await this.call("/bin/mkdir",["-p",path.dirname(fn)]);
+
+		if (this.mock) {
+			console.log("Writing: "+fn);
+			await delay(100);
+		}
+
+		else
+			fs.writeFileSync(fn,content);
+
+		if (options.mode)
+			await this.call("/bin/chmod",[options.mode,fn]);
+	}
+
+	call=async (cmd, params)=>{
+		if (this.mock) {
+			console.log("Calling: "+cmd+" "+params.join(" "));
+			await delay(100);
+		}
+
+		else
+			await call(cmd,params);
 	}
 
 	installLocalDebug=async ()=>{
@@ -100,9 +136,7 @@ export default class InstallModel extends EventEmitter {
 			mount.vboxsf moonflower /root/moonflower
 		`;
 
-		await call("/bin/mkdir",["-p","/mnt/etc/local.d/"]);
-		fs.writeFileSync("/mnt/etc/local.d/main.start",script);
-		await call("/bin/chmod",["755","/mnt/etc/local.d/main.start"]);
+		await this.writeFile("/mnt/etc/local.d/main.start",script,{mode: "755"});
 	}
 
 	run=async ()=>{
@@ -114,26 +148,25 @@ export default class InstallModel extends EventEmitter {
 			throw new Error("No install disk selected");
 
 		this.progress(10,"Making partitions on "+this.appModel.installDisk);
-		await call("/bin/sh",["-c",'printf "1M,1G,,*" | sfdisk '+this.appModel.installDisk]);
+		await this.call("/bin/sh",["-c",'printf "1M,1G,,*" | sfdisk '+this.appModel.installDisk]);
 
 		this.appModel.installPart=await this.getFirstPartFromDisk(this.appModel.installDisk);
 		this.progress(15,"Making filesystem on "+this.appModel.installPart);
-		await call("/sbin/mkfs.ext4",["-F",this.appModel.installPart]);
+		await this.call("/sbin/mkfs.ext4",["-F",this.appModel.installPart]);
 
 		this.progress(20,"Mounting filesystems...");
-		await call("/bin/mount",["-text4","/dev/sda1","/mnt"]);
+		await this.call("/bin/mount",["-text4","/dev/sda1","/mnt"]);
 
 		for (let chrootMount of this.chrootMounts)
-			await call("/bin/mkdir",["-p","/mnt/"+chrootMount]);
+			await this.call("/bin/mkdir",["-p","/mnt/"+chrootMount]);
 
 		for (let chrootMount of this.chrootMounts)
-			await call("/bin/mount",["--bind","/"+chrootMount,"/mnt/"+chrootMount]);
+			await this.call("/bin/mount",["--bind","/"+chrootMount,"/mnt/"+chrootMount]);
 
 		this.progress(30,"Installing packages...");
-		await call("/bin/mkdir",["-p","/mnt/usr/sbin"]);
+
 		let s='#!/bin/sh\n\nPKGSYSTEM_ENABLE_FSYNC=0 /usr/bin/update-mime-database "$@"';
-		fs.writeFileSync("/mnt/usr/sbin/update-mime-database",s);
-		await call("/bin/chmod",["755","/mnt/usr/sbin/update-mime-database"]);
+		await this.writeFile("/mnt/usr/sbin/update-mime-database",s,{mode: "755"})
 
 		let [rd,wt]=sys.pipe();
 		let rdStream=new Stream(rd,{lines: true});
@@ -150,7 +183,7 @@ export default class InstallModel extends EventEmitter {
 				this.progress(installPercent,"Installing packages... "+percent+"%");
 			}
 		});
-		await call("/sbin/apk",[
+		await this.call("/sbin/apk",[
 			"--no-cache",
 			"--progress-fd",wt,
 			"add","--initdb",
@@ -169,23 +202,23 @@ export default class InstallModel extends EventEmitter {
 		this.progress(80,"Enabling services...");
 		for (let runlevel in this.services) {
 			for (let service of this.services[runlevel]) {
-				await call("/usr/sbin/chroot",["/mnt/","/sbin/rc-update","add",service,runlevel]);
+				await this.call("/usr/sbin/chroot",["/mnt/","/sbin/rc-update","add",service,runlevel]);
 			}
 		}
 
 		this.progress(90,"Installing bootloader...");
-		let t=await fs.readFileSync("/mnt/etc/default/grub")
+		let t=await this.readFile("/mnt/etc/default/grub");
 		t+='GRUB_CMDLINE_LINUX_DEFAULT="modules=ext4 quiet"\n';
-		await fs.writeFileSync("/mnt/etc/default/grub",t);
+		await this.writeFile("/mnt/etc/default/grub",t);
 
-		await call("/usr/sbin/chroot",["/mnt/","/usr/sbin/grub-mkconfig","-o","/boot/grub/grub.cfg",this.appModel.installDisk]);
-		await call("/usr/sbin/chroot",["/mnt/","/usr/sbin/grub-install",this.appModel.installDisk]);
+		await this.call("/usr/sbin/chroot",["/mnt/","/usr/sbin/grub-mkconfig","-o","/boot/grub/grub.cfg",this.appModel.installDisk]);
+		await this.call("/usr/sbin/chroot",["/mnt/","/usr/sbin/grub-install",this.appModel.installDisk]);
 
 		this.progress(95,"Unmounting filesystems...");
 		for (let chrootMount of this.chrootMounts)
-			await call("/bin/umount",["/mnt/"+chrootMount]);
+			await this.call("/bin/umount",["/mnt/"+chrootMount]);
 
-		await call("/bin/umount",["/mnt"]);
+		await this.call("/bin/umount",["/mnt"]);
 
 		this.progress(100,"Done");
 		await delay(1000);

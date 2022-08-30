@@ -26,6 +26,9 @@ export default class Seq extends EventEmitter {
 			this.totalSize+=task.size;
 
 		this.mainProgress=0;
+		this.emit("progress",Math.round(100*this.mainProgress/this.totalSize))
+
+		this.mainProgress=0;
 		for (let i=0; i<this.tasks.length; i++) {
 			this.currentTask=this.tasks[i];
 			await this.currentTask.fn();
