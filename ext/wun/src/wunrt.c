@@ -141,6 +141,9 @@ void wunrt_create_window(WUNRT *wunrt) {
 	webkit_web_context_register_uri_scheme(context,"filejs",wunrt_on_filejs_request,wunrt,NULL);
 	webkit_web_context_set_web_extensions_directory(context,wunrt->library_path);
 
+	GVariant *argv=g_variant_new_strv((void *)wunrt->argv,-1);
+	webkit_web_context_set_web_extensions_initialization_user_data(context,argv);
+
 	g_signal_connect(context,"user-message-received",G_CALLBACK(wunrt_on_message),wunrt);
 }
 
@@ -162,6 +165,10 @@ void wunrt_set_height(WUNRT *wunrt, int height) {
 
 void wunrt_set_title(WUNRT *wunrt, char *title) {
 	wunrt->title=title;
+}
+
+void wunrt_set_argv(WUNRT *wunrt, char **argv) {
+	wunrt->argv=g_strdupv(argv);
 }
 
 void wunrt_load_url(WUNRT *wunrt) {

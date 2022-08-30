@@ -374,6 +374,21 @@ static void sys_show(WUNEXT *wunext) {
 	webkit_web_extension_send_message_to_context(wunext->extension,message,NULL,NULL,NULL);
 }
 
+static JSCValue *sys_get_argv(WUNEXT *wunext) {
+	const char *s[3];
+
+	s[0]=g_strdup("hello");
+	s[1]=g_strdup("world");
+	s[2]=NULL;
+
+//	return jsc_value_new_number(wunext->context,123);
+
+//	const char **test={"hello","world",NULL};
+
+//	return jsc_value_new_array_from_strv(wunext->context,wunext->argv);
+	return jsc_value_new_array_from_strv(wunext->context,s);
+}
+
 static char *window_get_title(WUNEXT *wunext) {
 	return g_strdup("no title for you");
 }
@@ -498,6 +513,8 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 		jsc_value_new_function(context,"show",G_CALLBACK(sys_show),wunext,NULL,G_TYPE_NONE,0)
 	);
 
+	jsc_value_object_set_property(sys,"argv",jsc_value_new_array_from_strv(wunext->context,wunext->argv));
+
 	JSCValue *console=jsc_value_new_object(context,NULL,NULL);
 	jsc_context_set_value(context,"console",console);
 
@@ -522,13 +539,15 @@ window_object_cleared_callback (WebKitScriptWorld *world,
 		G_TYPE_STRING,G_CALLBACK(window_get_title),G_CALLBACK(window_set_title),wunext,NULL);
 }
 
-G_MODULE_EXPORT void webkit_web_extension_initialize(WebKitWebExtension *extension) {
+G_MODULE_EXPORT void webkit_web_extension_initialize_with_user_data(WebKitWebExtension *extension, GVariant *data) {
 	if (wunext_signal_pipe!=-1)
 		printf("Warning: webkit_web_extension_initialize called twice\n");
+
 
 	WUNEXT *wunext=g_malloc(sizeof(WUNEXT));
 	wunext->extension=extension;
 	wunext->watch_by_fd=g_hash_table_new(g_direct_hash,g_direct_equal);
+	wunext->argv=g_variant_get_strv(data,&wunext->argc);
 
 	int pipes[2];
 	pipe(pipes);

@@ -21,6 +21,8 @@ typedef struct {
 	GHashTable *watch_by_fd;
 	GIOChannel *signal_channel;
 	int signal_source;
+	gsize argc;
+	const char **argv;
 } WUNEXT;
 
 #endif
