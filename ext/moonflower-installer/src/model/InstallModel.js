@@ -20,7 +20,6 @@ export default class InstallModel extends EventEmitter {
 			"eudev","eudev-openrc","udev-init-scripts","udev-init-scripts-openrc",
 			"xorg-server","xfce4","xfce4-terminal","mesa","xf86-input-libinput",
 			"virtualbox-guest-additions","openssh","lightdm-gtk-greeter",
-
 			"mesa-dri-gallium","xf86-video-vboxvideo"
 		];
 
