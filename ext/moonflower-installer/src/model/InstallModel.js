@@ -4,17 +4,15 @@ import {call} from "wun:subprocess";
 import Stream from "wun:stream";
 import fs from "wun:fs";
 import path from "wun:path";
+import Seq from "../utils/Seq.js";
 
 export default class InstallModel extends EventEmitter {
 	constructor(appModel) {
 		super();
 
 		this.appModel=appModel
-
-		this.runPromise=null;
-		this.percent=0;
-		this.message="";
 		this.state="none";
+		this.message="";
 
 		this.packages=[
 			"linux-lts","alpine-base","linux-firmware-none","grub","grub-bios","nano",
@@ -36,35 +34,52 @@ export default class InstallModel extends EventEmitter {
 		this.mock=sys.argv.includes("--mock");
 	}
 
+	getPercent=()=>{
+		return this.seq.getPercent();
+	}
+
 	start=()=>{
 		if (this.state!="none")
 			throw new Error("Already running");
 
-		console.log("Starting install, mock="+this.mock);
-
-		this.state="running";
-		this.percent=0;
 		this.message="";
-
-		this.emit("change");
-
-		this.runPromise=this.run();
-		this.runPromise.then(()=>{
-			this.state="complete";
-			this.emit("change");
-		}).catch((e)=>{
-			console.log("caught..");
-			console.log("caught error: "+e.message);
-
-			this.state="error";
-			this.message=e.message;
+		this.seq=new Seq();
+		this.seq.on("progress",()=>{
 			this.emit("change");
 		});
+
+		this.seq.add(this.installStart);
+		this.seq.add(this.installFormat);
+		this.seq.add(this.installMount);
+		this.seq.add(this.installPackages,{size: 5});
+		this.seq.add(this.installServices);
+		this.seq.add(this.installLocalDebug);
+		this.seq.add(this.installBootLoader);
+		this.seq.add(this.installUnmount);
+		this.seq.add(this.installDone,{size: 0});
+
+		this.state="running";
+		this.seq.run()
+			.then(()=>{
+				this.state="complete";
+				this.seq=null;
+				this.emit("change");
+			})
+			.catch((e)=>{
+				console.log("Caught error: "+e.message);
+
+				this.state="error";
+				this.message=e.message;
+				this.seq=null;
+				this.emit("change");
+			});
 	}
 
-	progress=(percent, message="Installing...")=>{
-		this.percent=percent;
+	progress=(message="Installing...", percent=null)=>{
 		this.message=message;
+		if (percent!==null)
+			this.seq.notifyPartialProgress(percent);
+
 		this.emit("change");
 	}
 
@@ -80,7 +95,6 @@ export default class InstallModel extends EventEmitter {
 		if (!part)
 			throw new Error("No partition found on disk");
 
-		console.log("part: "+part);
 		return part;
 	}
 
@@ -120,6 +134,8 @@ export default class InstallModel extends EventEmitter {
 	}
 
 	installLocalDebug=async ()=>{
+		this.progress("Installing debug services...");
+
 		let script=`
 			echo "Starting debug stuff..."
 
@@ -139,22 +155,24 @@ export default class InstallModel extends EventEmitter {
 		await this.writeFile("/mnt/etc/local.d/main.start",script,{mode: "755"});
 	}
 
-	run=async ()=>{
-		await delay(0);
-		if (this.appModel.installMethod!="disk")
-			throw new Error("Only disk install supported");
-
+	installFormat=async ()=>{
 		if (!this.appModel.installDisk)
 			throw new Error("No install disk selected");
 
-		this.progress(10,"Making partitions on "+this.appModel.installDisk);
-		await this.call("/bin/sh",["-c",'printf "1M,1G,,*" | sfdisk '+this.appModel.installDisk]);
+		if (this.appModel.installMethod=="disk") {
+			this.progress("Making partitions on "+this.appModel.installDisk);
+			await this.call("/bin/sh",["-c",'printf "1M,1G,,*" | sfdisk '+this.appModel.installDisk]);
+			this.appModel.installPart=await this.getFirstPartFromDisk(this.appModel.installDisk);
+		}
 
-		this.appModel.installPart=await this.getFirstPartFromDisk(this.appModel.installDisk);
-		this.progress(15,"Making filesystem on "+this.appModel.installPart);
+		this.seq.notifyPartialProgress(50);
+
+		this.progress("Making filesystem on "+this.appModel.installPart);
 		await this.call("/sbin/mkfs.ext4",["-F",this.appModel.installPart]);
+	}
 
-		this.progress(20,"Mounting filesystems...");
+	installMount=async ()=>{
+		this.progress("Mounting filesystems...");
 		await this.call("/bin/mount",["-text4","/dev/sda1","/mnt"]);
 
 		for (let chrootMount of this.chrootMounts)
@@ -162,8 +180,10 @@ export default class InstallModel extends EventEmitter {
 
 		for (let chrootMount of this.chrootMounts)
 			await this.call("/bin/mount",["--bind","/"+chrootMount,"/mnt/"+chrootMount]);
+	}
 
-		this.progress(30,"Installing packages...");
+	installPackages=async ()=>{
+		this.progress("Installing packages...");
 
 		let s='#!/bin/sh\n\nPKGSYSTEM_ENABLE_FSYNC=0 /usr/bin/update-mime-database "$@"';
 		await this.writeFile("/mnt/usr/sbin/update-mime-database",s,{mode: "755"})
@@ -174,15 +194,14 @@ export default class InstallModel extends EventEmitter {
 			let [current,total]=data.split("/");
 			current=Number(current); total=Number(total);
 			let percent=Math.round(100*(current/total));
-			if (percent==100) {
-				this.progress(70,"Configuring packages...");
-			}
 
-			else {
-				let installPercent=30+(70-30)*percent/100;
-				this.progress(installPercent,"Installing packages... "+percent+"%");
-			}
+			if (percent==100)
+				this.progress("Configuring packages...",100);
+
+			else
+				this.progress("Installing packages... "+percent+"%",percent);
 		});
+
 		await this.call("/sbin/apk",[
 			"--no-cache",
 			"--progress-fd",wt,
@@ -196,31 +215,41 @@ export default class InstallModel extends EventEmitter {
 				"PKGSYSTEM_ENABLE_FSYNC": 0
 			}
 		});
+	}
 
-		await this.installLocalDebug();
-
-		this.progress(80,"Enabling services...");
-		for (let runlevel in this.services) {
-			for (let service of this.services[runlevel]) {
-				await this.call("/usr/sbin/chroot",["/mnt/","/sbin/rc-update","add",service,runlevel]);
-			}
-		}
-
-		this.progress(90,"Installing bootloader...");
+	installBootLoader=async ()=>{
+		this.progress("Installing bootloader...");
 		let t=await this.readFile("/mnt/etc/default/grub");
 		t+='GRUB_CMDLINE_LINUX_DEFAULT="modules=ext4 quiet"\n';
 		await this.writeFile("/mnt/etc/default/grub",t);
 
 		await this.call("/usr/sbin/chroot",["/mnt/","/usr/sbin/grub-mkconfig","-o","/boot/grub/grub.cfg",this.appModel.installDisk]);
 		await this.call("/usr/sbin/chroot",["/mnt/","/usr/sbin/grub-install",this.appModel.installDisk]);
+	}
 
-		this.progress(95,"Unmounting filesystems...");
+	installServices=async ()=>{
+		this.progress("Enabling services...");
+		for (let runlevel in this.services) {
+			for (let service of this.services[runlevel]) {
+				await this.call("/usr/sbin/chroot",["/mnt/","/sbin/rc-update","add",service,runlevel]);
+			}
+		}
+	}
+
+	installUnmount=async ()=>{
+		this.progress("Unmounting filesystems...");
 		for (let chrootMount of this.chrootMounts)
 			await this.call("/bin/umount",["/mnt/"+chrootMount]);
 
 		await this.call("/bin/umount",["/mnt"]);
+	}
 
-		this.progress(100,"Done");
+	installStart=async ()=>{
+		this.progress("Installing...");
+	}
+
+	installDone=async ()=>{
+		this.progress("Done");
 		await delay(1000);
 	}
 }

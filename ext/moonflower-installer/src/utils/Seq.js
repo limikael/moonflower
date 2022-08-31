@@ -1,3 +1,4 @@
+import {delay} from "./js-util.js";
 import EventEmitter from "events";
 
 export default class Seq extends EventEmitter {
@@ -9,7 +10,7 @@ export default class Seq extends EventEmitter {
 
 	add(fn, options={}) {
 		let task={...options, fn};
-		if (!task.size)
+		if (task.size===undefined)
 			task.size=1;
 
 		this.tasks.push(task);
@@ -17,7 +18,7 @@ export default class Seq extends EventEmitter {
 
 	notifyPartialProgress(percent) {
 		let totalProgress=this.mainProgress+this.currentTask.size*percent/100;
-		this.emit("progress",Math.round(100*totalProgress/this.totalSize))
+		this.notifyProgress(Math.round(100*totalProgress/this.totalSize));
 	}
 
 	async run() {
@@ -26,15 +27,25 @@ export default class Seq extends EventEmitter {
 			this.totalSize+=task.size;
 
 		this.mainProgress=0;
-		this.emit("progress",Math.round(100*this.mainProgress/this.totalSize))
+		this.notifyProgress(Math.round(100*this.mainProgress/this.totalSize));
+
+		await delay(0);
 
 		this.mainProgress=0;
 		for (let i=0; i<this.tasks.length; i++) {
 			this.currentTask=this.tasks[i];
 			await this.currentTask.fn();
 			this.mainProgress+=this.currentTask.size;
-
-			this.emit("progress",Math.round(100*this.mainProgress/this.totalSize))
+			this.notifyProgress(Math.round(100*this.mainProgress/this.totalSize));
 		}
+	}
+
+	getPercent() {
+		return this.percent;
+	}
+
+	notifyProgress(percent) {
+		this.percent=percent;
+		this.emit("progress",percent);
 	}
 }

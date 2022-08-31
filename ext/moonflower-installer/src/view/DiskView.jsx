@@ -35,7 +35,8 @@ export default function KeyboardView({model}) {
 				<BsGroupInput title="Disk" type="select" 
 						options={model.getDiskOptions()}
 						onchange={exValue(model.setInstallDisk)}
-						class={diskClass}>
+						class={diskClass}
+						value={model.installDisk}>
 					{model.getDiskError() &&
 						<option selected disabled>{model.getDiskError()}</option>
 					}
@@ -45,6 +46,8 @@ export default function KeyboardView({model}) {
 						!!Object.keys(model.getPartOptions()).length &&
 					<BsGroupInput title="Partition" type="select" 
 							options={model.getPartOptions()}
+							onchange={exValue(model.setInstallPart)}
+							value={model.installPart}
 					/>
 				}
 			</div>

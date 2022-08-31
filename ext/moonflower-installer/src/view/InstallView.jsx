@@ -14,8 +14,8 @@ function RunningContent({model}) {
 					<div class="progress-bar progress-bar-striped progress-bar-animated bg-info"
 						role="progressbar"
 						aria-valuemin="0" aria-valuemax="100"
-						aria-valuenow={model.installModel.percent}
-						style={{width: `${model.installModel.percent}%`}}/>
+						aria-valuenow={model.installModel.getPercent()}
+						style={{width: `${model.installModel.getPercent()}%`}}/>
 				</div>
 				<div style="height: 5em"/>
 			</div>
