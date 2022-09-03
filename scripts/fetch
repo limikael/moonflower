@@ -359,7 +359,4 @@ os-prober \
 xf86-video-vboxvideo \
 gparted \
 
-
-rm ./apks/x86_64/APKINDEX.tar.gz
-apk --root=apkroot index -o apks/x86_64/APKINDEX.tar.gz --rewrite-arch x86_64 apks/x86_64/*.apk
-abuild-sign -k /home/micke/Repo.lab/moonflower/abuild/li.mikael@gmail.com-62df97f2.rsa ./apks/x86_64/APKINDEX.tar.gz
+make sign-local-repo

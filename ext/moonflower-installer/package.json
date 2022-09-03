@@ -5,7 +5,8 @@
 		"dev": "yarn build && ./bin/moonflower-installer --mock",
 		"gen": "(tools/fetchapks.sh || true) && tools/mkkeymaps.js",
 		"postinstall": "link-module-alias",
-		"test": "jasmine"
+		"test": "jasmine",
+		"apk": "yarn build && docker build -t mfl-installer-builder build && mkdir -p build/out && rm -rf build/out/* && docker run -it -v $(pwd):/pkg -e PACKAGER_PRIVKEY=/pkg/build/.keys/moonflower.rsa mfl-installer-builder /bin/sh -c 'abuild -d && cp /home/builder/packages/pkg/x86_64/*.apk /pkg/build/out'"
 	},
 	"type": "module",
 	"dependencies": {

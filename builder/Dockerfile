@@ -12,6 +12,6 @@ RUN echo 'build ALL=(ALL) NOPASSWD: ALL' | tee -a /etc/sudoers
 RUN git clone --depth=1 https://gitlab.alpinelinux.org/alpine/aports.git /home/build/aports
 RUN cd /home/build/aports && apk update
 
-RUN su - build -c "abuild-keygen -ina"
-COPY li.mikael@gmail.com-62df97f2.rsa.pub /etc/apk/keys
+COPY .keys/moonflower.rsa.pub /etc/apk/keys
+COPY --chown=build:abuild .keys/moonflower.rsa /
 COPY *.sh /home/build/aports/scripts/

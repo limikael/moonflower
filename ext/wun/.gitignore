@@ -1,5 +1,5 @@
 attic
 bin/wun
 lib/wunext.so
-build/keys/*.rsa
+build/.keys
 build/out

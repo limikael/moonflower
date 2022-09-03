@@ -19,10 +19,10 @@ alpine-package:
 
 alpine-package-abuild:
 	make clean
-	sudo cp /src/build/keys/*.pub /etc/apk/keys
+	sudo cp /src/build/.keys/*.pub /etc/apk/keys
 	mkdir -p /src/build/out
 	rm -f /src/build/out/*.apk
 	rm -f /home/builder/packages/build/x86_64/*
-	cd /src/build/alpine && PACKAGER_PRIVKEY=/src/build/keys/li.mikael@gmail.com-62df97f2.rsa abuild
+	cd /src/build/alpine && PACKAGER_PRIVKEY=/src/build/.keys/moonflower.rsa abuild
 	cp /home/builder/packages/build/x86_64/*.apk /src/build/out
 	make clean

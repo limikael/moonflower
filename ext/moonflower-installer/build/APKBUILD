@@ -18,5 +18,5 @@ package() {
     mkdir -p $pkgdir
     mkdir -p $pkgdir/usr/bin
     # yarn build
-    cp ../bin/moonflower-installer $pkgdir/usr/bin
+    cp /pkg/bin/moonflower-installer $pkgdir/usr/bin
 }

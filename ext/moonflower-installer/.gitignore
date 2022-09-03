@@ -1,2 +1,4 @@
 tools/apkroot
+build/.keys
+build/out
 node_modules

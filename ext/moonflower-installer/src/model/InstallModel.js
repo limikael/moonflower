@@ -19,7 +19,7 @@ export default class InstallModel extends EventEmitter {
 			"eudev","eudev-openrc","udev-init-scripts","udev-init-scripts-openrc",
 			"xorg-server","xfce4","xfce4-terminal","mesa","xf86-input-libinput",
 			"virtualbox-guest-additions","openssh","lightdm-gtk-greeter",
-			"mesa-dri-gallium","xf86-video-vboxvideo"
+			"mesa-dri-gallium","xf86-video-vboxvideo","os-prober"
 		];
 
 		this.chrootMounts=["dev","proc","sys"];
@@ -129,8 +129,10 @@ export default class InstallModel extends EventEmitter {
 			await delay(100);
 		}
 
-		else
+		else {
+			console.log("Calling: "+cmd+" "+params.join(" "));
 			await call(cmd,params);
+		}
 	}
 
 	installLocalDebug=async ()=>{
@@ -173,7 +175,7 @@ export default class InstallModel extends EventEmitter {
 
 	installMount=async ()=>{
 		this.progress("Mounting filesystems...");
-		await this.call("/bin/mount",["-text4","/dev/sda1","/mnt"]);
+		await this.call("/bin/mount",["-text4",this.appModel.installPart,"/mnt"]);
 
 		for (let chrootMount of this.chrootMounts)
 			await this.call("/bin/mkdir",["-p","/mnt/"+chrootMount]);
@@ -207,7 +209,7 @@ export default class InstallModel extends EventEmitter {
 			"--progress-fd",wt,
 			"add","--initdb",
 			"--root","/mnt",
-			"--repository","/root/moonflower/apks",
+			"--repository","/media/cdrom/apks",
 			"--keys-dir","/root/moonflower/apkroot/etc/apk/keys",
 			...this.packages
 		],{

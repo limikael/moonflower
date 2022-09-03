@@ -1,7 +1,10 @@
 apkroot
+apkroot-target
 apks
 attic
 iso
 tmp
 vm
 abuild
+.keys
+builder/.keys

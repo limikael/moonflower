@@ -74,6 +74,10 @@ sfdisk
 wun
 mesa-dri-gallium
 xf86-video-vboxvideo
+lsblk
+sfdisk
+gparted
+moonflower-installer
 EOF
 
 rc_add devfs sysinit
